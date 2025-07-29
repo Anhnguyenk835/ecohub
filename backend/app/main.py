@@ -8,6 +8,8 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.field.field_route import router as field_router
 
+from app.services.mqtt_service import connect_mqtt, start_mqtt_loop, stop_mqtt_loop
+
 logger = get_logger(__name__)
 
 
@@ -20,9 +22,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting FastAPI application...")
     
+    # --- CONNECT MQTT ---
+    connect_mqtt()
+    start_mqtt_loop()
+
     yield  # Application is running
     
     # Shutdown
+    stop_mqtt_loop()
     logger.info("Shutting down FastAPI application...")
 
 

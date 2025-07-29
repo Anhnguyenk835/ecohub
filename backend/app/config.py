@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     api_description: str = os.getenv("API_DESCRIPTION", "A FastAPI application with MQTT and Firebase integration")
     api_version: str = os.getenv("API_VERSION", "1.0.0")
 
+    # MQTT Configuration
+    mqtt_broker_host: str = os.getenv("MQTT_BROKER_HOST", "localhost")
+    mqtt_port: int = int(os.getenv("MQTT_PORT", 1883))
+    mqtt_topic: str = os.getenv("MQTT_TOPIC", "default/topic")
+    mqtt_client_id: str = os.getenv("MQTT_CLIENT_ID", "fastapi_client")
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
