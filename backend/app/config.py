@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     mqtt_port: int = int(os.getenv("MQTT_PORT", 1883))
     mqtt_topic: str = os.getenv("MQTT_TOPIC", "default/topic")
     mqtt_client_id: str = os.getenv("MQTT_CLIENT_ID", "fastapi_client")
+    mqtt_command_topic: str = os.getenv("MQTT_COMMAND_TOPIC", "default/command_topic")
+
+    # Threshold Configuration
+    TEMP_THRESHOLD_HIGH: float = 35.0  # Bật quạt nếu nhiệt độ > 35
+    TEMP_THRESHOLD_LOW: float = 25.0   # Bật đèn sưởi nếu nhiệt độ < 25
+    SOIL_MOISTURE_THRESHOLD_LOW: int = 65 # Bật bơm nếu độ ẩm đất < 65
     
     class Config:
         env_file = ".env"

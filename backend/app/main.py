@@ -1,14 +1,17 @@
 import asyncio
 from contextlib import asynccontextmanager
 
+from pydantic import BaseModel
+
 from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.utils.logger import get_logger
 from app.field.field_route import router as field_router
 
-from app.services.mqtt_service import connect_mqtt, start_mqtt_loop, stop_mqtt_loop
+from app.services import mqtt_service
 
 logger = get_logger(__name__)
 
@@ -23,13 +26,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting FastAPI application...")
     
     # --- CONNECT MQTT ---
-    connect_mqtt()
-    start_mqtt_loop()
+    mqtt_service.start_mqtt_service()
 
     yield  # Application is running
     
     # Shutdown
-    stop_mqtt_loop()
+    mqtt_service.stop_mqtt_service()
     logger.info("Shutting down FastAPI application...")
 
 
@@ -50,9 +52,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class CommandRequest(BaseModel):
+    command: str
+
+@app.post("/api/command", status_code=200, tags=["Commands"])
+async def send_command_to_device(request: CommandRequest):
+    """
+    Nhận một lệnh từ client (ví dụ: web dashboard) và publish nó
+    đến topic MQTT để thiết bị IoT thực thi.
+    """
+    # Danh sách các lệnh hợp lệ để bảo mật và tránh lỗi
+    valid_commands = [
+        "TURN_FAN_ON", "TURN_FAN_OFF",
+        "TURN_HEATER_ON", "TURN_HEATER_OFF",
+        "PUMP_WATER_ON"
+    ]
+    
+    if request.command not in valid_commands:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid command. Valid commands are: {valid_commands}"
+        )
+        
+    logger.info(f"Received API request to send command: {request.command}")
+    
+    # Gọi hàm publish từ mqtt_service
+    success = mqtt_service.publish_command(request.command)
+    
+    if success:
+        return {"status": "success", "message": f"Command '{request.command}' published successfully."}
+    else:
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to publish command to MQTT broker."
+        )
+
 # Include API routes
 app.include_router(field_router)
-
 
 @app.middleware("http")
 async def log_requests(request, call_next):
