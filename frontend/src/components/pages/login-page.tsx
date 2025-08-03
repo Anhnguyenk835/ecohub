@@ -1,0 +1,131 @@
+"use client"
+
+import { useState } from "react"
+import { Eye, EyeOff, Leaf } from "lucide-react"
+
+export default function LoginPage() {
+  const [showPassword, setShowPassword] = useState(false)
+
+  return (
+    <div className="min-h-screen w-full flex flex-col lg:flex-row">
+      {/* Left side - Login form */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center bg-white p-8 lg:p-12">
+        <div className="w-full max-w-md space-y-8">
+          {/* Logo and header */}
+          <div className="text-center space-y-4">
+            <div className="flex items-center justify-center space-x-4 mb-6">
+              <div className="flex items-center justify-center">
+                <img src="/Logo.png" alt="EcoHub Logo" className="w-16 h-16" />
+              </div>
+              <h1 className="text-4xl font-medium text-[#357133]">EcoHub</h1>
+            </div>
+            <p className="text-sm text-[#2E7D32] leading-relaxed max-w-sm mx-auto">
+              Sign in to stay updated on field insights and manage resources with ease
+            </p>
+          </div>
+
+          {/* Login form */}
+          <form className="space-y-6">
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="Enter your email"
+                  className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all duration-200 text-gray-900 placeholder-gray-500"
+                />
+              </div>
+
+              <div className="relative">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all duration-200 text-gray-900 placeholder-gray-500 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 transform translate-y-1 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <a href="#" className="text-sm text-green-600 hover:text-green-700 font-medium transition-colors">
+                Forgot password?
+              </a>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full h-12 bg-[#648E7F] hover:bg-[#5A7F71] active:bg-[#507063] text-white font-semibold rounded-lg transition-all duration-200 cursor-pointer"
+            >
+              SIGN IN
+            </button>
+          </form>
+
+          {/* Sign up link */}
+          <div className="text-center pt-4">
+            <p className="text-sm text-gray-600">
+              Don't have an account?{" "}
+              <a href="#" className="text-green-600 hover:text-green-700 font-semibold transition-colors">
+                Sign Up Now
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Right side - Hero image and branding */}
+      <div className="w-full lg:w-1/2 min-h-[400px] lg:min-h-screen relative">
+        {/* Background image */}
+        <div className="absolute inset-0">
+          <img
+            src="/login_image.png"
+            alt="Login background"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-green-900/40" />
+        </div>
+
+        {/* Content overlay */}
+        <div className="relative z-10 flex flex-col items-center justify-center h-full text-white p-8 lg:p-12">
+          <div className="text-center space-y-8 max-w-lg">
+
+            {/* Welcome message */}
+            <div className="space-y-4">
+              <p className="text-lg leading-relaxed">
+              Welcome to EcoHub – your complete solution for crop and resource management
+              </p>
+            </div>
+
+            {/* Feature highlights */}
+            {/* <div className="grid grid-cols-1 gap-4 mt-8 text-left">
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-300 rounded-full"></div>
+                <span className="text-green-100">Real-time field monitoring</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-300 rounded-full"></div>
+                <span className="text-green-100">Resource optimization</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-green-300 rounded-full"></div>
+                <span className="text-green-100">Data-driven insights</span>
+              </div>
+            </div> */}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
