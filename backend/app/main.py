@@ -15,7 +15,6 @@ from app.services import mqtt_service
 
 logger = get_logger(__name__)
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """

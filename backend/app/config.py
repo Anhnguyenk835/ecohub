@@ -26,16 +26,16 @@ class Settings(BaseSettings):
     api_version: str = os.getenv("API_VERSION", "1.0.0")
 
     # MQTT Configuration
-    mqtt_broker_host: str = os.getenv("MQTT_BROKER_HOST", "localhost")
-    mqtt_port: int = int(os.getenv("MQTT_PORT", 1883))
-    mqtt_topic: str = os.getenv("MQTT_TOPIC", "default/topic")
-    mqtt_client_id: str = os.getenv("MQTT_CLIENT_ID", "fastapi_client")
-    mqtt_command_topic: str = os.getenv("MQTT_COMMAND_TOPIC", "default/command_topic")
+    mqtt_broker_host: str = os.getenv("MQTT_BROKER_HOST")
+    mqtt_port: int = int(os.getenv("MQTT_PORT"))
+    mqtt_topic: str = os.getenv("MQTT_TOPIC")
+    mqtt_client_id: str = os.getenv("MQTT_CLIENT_ID")
+    mqtt_command_topic: str = os.getenv("MQTT_COMMAND_TOPIC")
 
     # Threshold Configuration
-    TEMP_THRESHOLD_HIGH: float = 35.0  # Bật quạt nếu nhiệt độ > 35
-    TEMP_THRESHOLD_LOW: float = 25.0   # Bật đèn sưởi nếu nhiệt độ < 25
-    SOIL_MOISTURE_THRESHOLD_LOW: int = 65 # Bật bơm nếu độ ẩm đất < 65
+    TEMP_THRESHOLD_HIGH: float = float(os.getenv("TEMP_THRESHOLD_HIGH", 35.0))
+    TEMP_THRESHOLD_LOW: float = float(os.getenv("TEMP_THRESHOLD_LOW", 25.0))
+    SOIL_MOISTURE_THRESHOLD_LOW: int = int(os.getenv("SOIL_MOISTURE_THRESHOLD_LOW", 30))
     
     class Config:
         env_file = ".env"

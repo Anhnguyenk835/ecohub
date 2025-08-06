@@ -7,7 +7,8 @@ from app.services.database import db  # Giả sử bạn có firebase_service
 logger = get_logger(__name__)
 
 # Initialize MQTT Client
-mqtt_client = mqtt.Client(client_id=settings.mqtt_client_id, callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
+mqtt_client = mqtt.Client(client_id=settings.mqtt_client_id,
+                          callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
 
 def on_connect(client, userdata, flags, rc):
     """Callback for when the client connects to the broker."""
@@ -97,9 +98,14 @@ def publish_command(command: str):
         # result.is_published() sẽ trả về True nếu thành công
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             logger.info(f"Successfully published command '{command}' to topic '{topic}'")
+
+            logger.info(f"ACTION LOGGED: Command '{command}' sent to devices.")
+
+            return True
         else:
             logger.error(f"Failed to publish command '{command}'. Return code: {result.rc}")
-        return result.is_published()
+            return False
+        
     except Exception as e:
         logger.error(f"Exception while publishing command: {e}")
         return False
@@ -127,6 +133,15 @@ def start_mqtt_service():
         logger.info("MQTT service started and loop is running.")
     except Exception as e:
         logger.error(f"Could not start MQTT service: {e}")
+
+def stop_mqtt_service():
+    """Hàm để dừng service MQTT một cách an toàn."""
+    try:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+        logger.info("MQTT service stopped.")
+    except Exception as e:
+        logger.error(f"Error stopping MQTT service: {e}")
 
 def stop_mqtt_loop():
     """Stop the MQTT client loop."""
