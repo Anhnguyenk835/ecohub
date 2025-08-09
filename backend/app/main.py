@@ -9,7 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.utils.logger import get_logger
+
 from app.field.field_route import router as field_router
+from app.user.user_route import router as user_router
 
 from app.services import mqtt_service
 
@@ -88,6 +90,7 @@ async def send_command_to_device(request: CommandRequest):
 
 # Include API routes
 app.include_router(field_router)
+app.include_router(user_router)
 
 @app.middleware("http")
 async def log_requests(request, call_next):

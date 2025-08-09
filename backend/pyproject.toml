@@ -13,9 +13,10 @@ uvicorn = {extras = ["standard"], version = "^0.24.0"}
 gmqtt = "^0.6.16"
 firebase-admin = "^6.4.0"
 python-dotenv = "^1.0.0"
-pydantic = ">=2.0.0"
+pydantic = {extras = ["email"], version = "^2.11.7"}
 pydantic-settings = "^2.10.1"
 paho-mqtt = "^2.1.0"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
