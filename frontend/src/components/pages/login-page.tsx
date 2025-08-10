@@ -1,10 +1,17 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "@/contexts/AuthContext"
+import { useRouter } from "next/navigation"
 import { Eye, EyeOff, Leaf } from "lucide-react"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const { signIn } = useAuth()
+  const router = useRouter()
 
   return (
     <div className="min-h-screen w-full flex flex-col lg:flex-row">
@@ -25,7 +32,27 @@ export default function LoginPage() {
           </div>
 
           {/* Login form */}
-          <form className="space-y-6">
+          <form
+            className="space-y-6"
+            onSubmit={async (e) => {
+              e.preventDefault()
+              setError(null)
+              try {
+                await signIn(email, password)
+                // Log user id and token for debugging as requested
+                try {
+                  const token = await (await import("@/lib/firebase-auth")).getIdToken()
+                  // eslint-disable-next-line no-console
+                  console.log("UserID:", (await import("firebase/auth")).getAuth().currentUser?.uid)
+                  // eslint-disable-next-line no-console
+                  console.log("Token:", token)
+                } catch {}
+                router.push('/home')
+              } catch (err: any) {
+                setError(err?.message || "Failed to sign in")
+              }
+            }}
+          >
             <div className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -35,6 +62,8 @@ export default function LoginPage() {
                   id="email"
                   type="email"
                   placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all duration-200 text-gray-900 placeholder-gray-500"
                 />
               </div>
@@ -47,6 +76,8 @@ export default function LoginPage() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all duration-200 text-gray-900 placeholder-gray-500 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
                 />
                 <button
@@ -65,6 +96,10 @@ export default function LoginPage() {
               </a>
             </div>
 
+            {error && (
+              <div className="text-sm text-red-600">{error}</div>
+            )}
+
             <button
               type="submit"
               className="w-full h-12 bg-[#648E7F] hover:bg-[#5A7F71] active:bg-[#507063] text-white font-semibold rounded-lg transition-all duration-200 cursor-pointer"
@@ -77,7 +112,7 @@ export default function LoginPage() {
           <div className="text-center pt-4">
             <p className="text-sm text-gray-600">
               Don't have an account?{" "}
-              <a href="#" className="text-green-600 hover:text-green-700 font-semibold transition-colors">
+              <a href="/signup" className="text-green-600 hover:text-green-700 font-semibold transition-colors">
                 Sign Up Now
               </a>
             </p>
