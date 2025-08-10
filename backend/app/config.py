@@ -30,7 +30,9 @@ class Settings(BaseSettings):
     mqtt_port: int = int(os.getenv("MQTT_PORT"))
     mqtt_topic: str = os.getenv("MQTT_TOPIC")
     mqtt_client_id: str = os.getenv("MQTT_CLIENT_ID")
-    mqtt_command_topic: str = os.getenv("MQTT_COMMAND_TOPIC")
+    # Command topic is optional at load time to avoid validation errors;
+    # we validate presence in validate_settings()
+    mqtt_command_topic: Optional[str] = os.getenv("MQTT_COMMAND_TOPIC")
 
     # Threshold Configuration
     TEMP_THRESHOLD_HIGH: float = float(os.getenv("TEMP_THRESHOLD_HIGH", 35.0))
@@ -61,6 +63,18 @@ class Settings(BaseSettings):
         # Check if .env file exists
         if not os.path.exists(".env"):
             errors.append(".env file not found. Configure your settings")
+
+        # Check required MQTT settings
+        if not self.mqtt_broker_host:
+            errors.append("MQTT_BROKER_HOST must be set")
+        if self.mqtt_port is None:
+            errors.append("MQTT_PORT must be set")
+        if not self.mqtt_topic:
+            errors.append("MQTT_TOPIC must be set")
+        if not self.mqtt_client_id:
+            errors.append("MQTT_CLIENT_ID must be set")
+        if not self.mqtt_command_topic:
+            errors.append("MQTT_COMMAND_TOPIC must be set")
         
         if errors:
             error_message = "Configuration errors found:\n" + "\n".join(f"  - {error}" for error in errors)

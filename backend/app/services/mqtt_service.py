@@ -94,6 +94,9 @@ def publish_command(command: str):
     """Publishes a command to the command topic."""
     try:
         topic = settings.mqtt_command_topic
+        if not topic:
+            logger.error("MQTT_COMMAND_TOPIC is not set. Cannot publish command.")
+            return False
         result = mqtt_client.publish(topic, command)
         # result.is_published() sẽ trả về True nếu thành công
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
