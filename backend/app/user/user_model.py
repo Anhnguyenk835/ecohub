@@ -18,7 +18,7 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     """Model cho dữ liệu trả về, không bao giờ chứa mật khẩu."""
-    id: str = Field(..., description="ID định danh của người dùng")
+    id: str = Field(..., description="ID user")
     createdAt: datetime = Field(..., description="Time user was created")
     updatedAt: datetime = Field(..., description="Time user was updated")
 

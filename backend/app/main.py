@@ -12,6 +12,16 @@ from app.utils.logger import get_logger
 
 from app.field.field_route import router as field_router
 from app.user.user_route import router as user_router
+from app.zone.zone_route import router as zone_router
+from app.zone_status.zone_status_route import router as zone_status_router
+from app.sensor.sensor_route import router as sensor_router
+from app.readings_history.reading_history_route import router as reading_history_router
+from app.device.device_route import router as device_router
+from app.crop_profile.crop_profile_route import router as crop_profile_router
+from app.command.command_route import router as command_router
+from app.alter.alter_route import router as alter_router
+from app.actuator.actuator_route import router as actuator_router
+from app.action_log.action_log_route import router as action_log_router
 
 from app.services import mqtt_service
 
@@ -89,8 +99,18 @@ async def send_command_to_device(request: CommandRequest):
         )
 
 # Include API routes
-app.include_router(field_router)
+# app.include_router(field_router)
 app.include_router(user_router)
+app.include_router(zone_router)
+app.include_router(zone_status_router)
+app.include_router(sensor_router)
+app.include_router(reading_history_router)
+app.include_router(device_router)
+app.include_router(crop_profile_router)
+app.include_router(command_router)
+app.include_router(alter_router)
+app.include_router(actuator_router)
+app.include_router(action_log_router)
 
 @app.middleware("http")
 async def log_requests(request, call_next):
