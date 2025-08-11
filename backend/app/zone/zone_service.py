@@ -5,6 +5,8 @@ from fastapi.concurrency import run_in_threadpool
 from app.services.database import db
 from app.utils.logger import get_logger
 
+from app.zone_status.zone_status_service import ZoneStatusService 
+
 logger = get_logger(__name__)
 
 class ZoneService:
@@ -13,6 +15,8 @@ class ZoneService:
     def __init__(self, collection_name: str = "zones"):
         self.collection_name = collection_name
         self.collection = db.collection(collection_name)
+
+        self.zone_status_service = ZoneStatusService()
 
     async def create_zone(self, zone_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Tạo một zone mới trong Firestore."""
@@ -27,6 +31,8 @@ class ZoneService:
             
             logger.info(f"Zone created successfully with ID: {doc_ref.id}")
             
+            initial_status = await self.zone_status_service.create_initial_zone_status(doc_ref.id)
+
             # Trả về dữ liệu đã tạo để không cần query lại
             created_data = zone_data.copy()
             created_data['id'] = doc_ref.id

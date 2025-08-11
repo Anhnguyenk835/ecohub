@@ -35,6 +35,17 @@ class ZoneStatusService:
             logger.error(f"Error retrieving status for zone {zone_id}: {str(e)}")
             return None
 
+
+    async def create_initial_zone_status(self, zone_id: str) -> Optional[Dict[str, Any]]:
+        """Tạo một document status ban đầu cho một zone mới."""
+        initial_status_data = {
+            "status": "Unknown",  
+            "actuatorStates": {}, 
+            "lastReadings": {},  
+        }
+        
+        return await self.update_zone_status(zone_id, initial_status_data)
+
     async def update_zone_status(self, zone_id: str, status_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Tạo mới hoặc cập nhật (upsert) trạng thái của một khu vực.

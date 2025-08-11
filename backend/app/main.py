@@ -66,7 +66,7 @@ app.add_middleware(
 )
 
 # Attach global auth middleware
-app.add_middleware(AuthMiddleware)
+# app.add_middleware(AuthMiddleware)
 
 class CommandRequest(BaseModel):
     command: str
