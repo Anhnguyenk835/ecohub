@@ -35,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           displayName: fbUser.displayName,
           emailVerified: !!fbUser.emailVerified,
         })
+        try { sessionStorage.setItem('uid', fbUser.uid) } catch {}
         if (fbUser.emailVerified) {
           // Best effort profile sync; ignore errors
           try {
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         setUser(null)
+        try { sessionStorage.removeItem('uid') } catch {}
       }
       setIsLoading(false)
     })
