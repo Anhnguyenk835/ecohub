@@ -18,7 +18,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app, public_paths: Optional[Set[str]] = None):
         super().__init__(app)
-        self.public_paths: Set[str] = public_paths or {"/docs", "/openapi.json", "/redoc"}
+        self.public_paths: Set[str] = public_paths or {"/docs", "/openapi.json", "/redoc", "/zones"}
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Allow CORS preflight and docs without auth
