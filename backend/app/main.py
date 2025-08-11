@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 
 from pydantic import BaseModel
 
-from fastapi import FastAPI
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -24,6 +24,8 @@ from app.actuator.actuator_route import router as actuator_router
 from app.action_log.action_log_route import router as action_log_router
 
 from app.services import mqtt_service
+from app.services.firebase_auth import get_verified_user
+from app.middleware.auth import AuthMiddleware
 
 logger = get_logger(__name__)
 
@@ -63,11 +65,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Attach global auth middleware
+app.add_middleware(AuthMiddleware)
+
 class CommandRequest(BaseModel):
     command: str
 
 @app.post("/api/command", status_code=200, tags=["Commands"])
-async def send_command_to_device(request: CommandRequest):
+async def send_command_to_device(request: CommandRequest, _=Depends(get_verified_user)):
     """
     Nhận một lệnh từ client (ví dụ: web dashboard) và publish nó
     đến topic MQTT để thiết bị IoT thực thi.

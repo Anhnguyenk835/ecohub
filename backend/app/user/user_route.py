@@ -1,65 +1,60 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List, Dict
+from typing import Dict
 
-from app.user.user_model import UserCreate, UserUpdate, UserResponse
+from app.user.user_model import UserUpdate, UserResponse
 from app.user.user_service import UserService
 from app.utils.logger import get_logger
+from app.services.firebase_auth import get_current_user, get_verified_user
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 user_service = UserService()
 
-# Dependency để lấy user hoặc báo lỗi 404
-async def get_user_or_404(user_id: str) -> Dict:
-    user = await user_service.get_user(user_id)
+async def get_user_or_404(uid: str) -> Dict:
+    user = await user_service.get_user(uid)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with ID {user_id} not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with UID {uid} not found")
     return user
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(user_data: UserCreate):
-    """Tạo một người dùng mới."""
-    # Kiểm tra xem email đã tồn tại chưa
-    existing_user = await user_service.get_user_by_email(user_data.email)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email đã được đăng ký."
-        )
-    
-    created_user = await user_service.create_user(user_data.dict())
-    if not created_user:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể tạo người dùng")
-    
-    return UserResponse(**created_user)
+@router.post("/me/sync", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def sync_profile(current = Depends(get_verified_user)):
+    """Create or update the profile for the authenticated user (verified email required)."""
+    profile = {
+        "uid": current["uid"],
+        "email": current.get("email"),
+        "displayName": current.get("name"),
+        "emailVerified": True,
+    }
+    saved = await user_service.create_or_update_profile(current["uid"], profile)
+    return UserResponse(**saved)
 
-@router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user: dict = Depends(get_user_or_404)):
-    """Lấy thông tin người dùng bằng ID."""
-    return UserResponse(**user)
+@router.get("/me", response_model=UserResponse)
+async def get_me(current = Depends(get_verified_user)):
+    profile = await user_service.get_user(current["uid"]) 
+    if not profile:
+        # Auto-create minimal profile if missing
+        profile = await user_service.create_or_update_profile(current["uid"], {
+            "uid": current["uid"],
+            "email": current.get("email"),
+            "displayName": current.get("name"),
+            "emailVerified": current.get("email_verified", False),
+        })
+    return UserResponse(**profile)
 
-@router.put("/{user_id}", response_model=UserResponse)
-async def update_user(user_data: UserUpdate, user: dict = Depends(get_user_or_404)):
-    """Cập nhật thông tin người dùng."""
-    user_id = user['id']
+@router.put("/me", response_model=UserResponse)
+async def update_me(user_data: UserUpdate, current = Depends(get_verified_user)):
     update_dict = user_data.dict(exclude_unset=True)
-
     if not update_dict:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Không có dữ liệu để cập nhật")
-
-    success = await user_service.update_user(user_id, update_dict)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No data to update")
+    success = await user_service.update_user(current["uid"], update_dict)
     if not success:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể cập nhật người dùng")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update user")
+    updated = await user_service.get_user(current["uid"])
+    return UserResponse(**updated)
 
-    # Lấy lại thông tin mới nhất để trả về
-    updated_user = await user_service.get_user(user_id)
-    return UserResponse(**updated_user)
-
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user: dict = Depends(get_user_or_404)):
-    """Xóa một người dùng."""
-    user_id = user['id']
-    success = await user_service.delete_user(user_id)
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(current = Depends(get_verified_user)):
+    success = await user_service.delete_user(current["uid"])
     if not success:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Không thể xóa người dùng")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete user")
