@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Droplets, Fan, Lightbulb, Power, Wifi, AlertTriangle } from "lucide-react";
-import mqtt from "mqtt/dist/mqtt";
+// import mqtt from "mqtt/dist/mqtt";
 
 /**
  * EcoHub – Circular On/Off Toggles (React + MQTT over WebSocket)

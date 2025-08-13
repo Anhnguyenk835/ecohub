@@ -70,3 +70,14 @@ class ZoneStatusService:
         except Exception as e:
             logger.error(f"Error updating status for zone {zone_id}: {str(e)}")
             return None
+        
+    async def delete_status_for_zone(self, zone_id: str) -> bool:
+        try:
+            doc_id = self._get_doc_id(zone_id)
+            doc_ref = self.collection.document(doc_id)
+            await run_in_threadpool(doc_ref.delete)
+            logger.info(f"Deleted status for zone {zone_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting status for zone {zone_id}: {e}", exc_info=True)
+            return False

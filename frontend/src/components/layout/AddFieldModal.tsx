@@ -38,8 +38,8 @@ const getDefaultFormState = (fieldCount: number): FormState => ({
     airHumidity: { enabled: true, min: 40, max: 70 },
     soilMoisture: { enabled: true, min: 30, max: 60 },
     lightIntensity: { enabled: true, min: 0, max: 10000 },
-    pH: { enabled: true, min: 6, max: 7 },
-    Co2: { enabled: true, min: 400, max: 1000 },
+    ph: { enabled: true, min: 6, max: 7 },
+    co2: { enabled: true, min: 400, max: 1000 },
   },
 });
 

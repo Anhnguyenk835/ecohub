@@ -30,3 +30,18 @@ export async function post<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T
 }
 
+export async function del(path: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'DELETE',
+    headers: await authHeaders(),
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(`DELETE ${path} failed: ${res.status} - ${errorBody.detail}`);
+  }
+
+  return;
+}
+

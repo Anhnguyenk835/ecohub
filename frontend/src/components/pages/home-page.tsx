@@ -5,7 +5,7 @@
   import { Navbar } from "../layout/nav-bar"
   import { FieldCard, type FieldData } from "../layout/field-card"
   import { AddFieldModal } from "../layout/AddFieldModal"
-  import { get, post } from "@/lib/api"
+  import { get, post, del } from "@/lib/api"
   import { useAuth } from "@/contexts/AuthContext"  
 
   export default function HomePage() {
@@ -112,8 +112,7 @@
 
     const newFieldData = {
       ...formDataFromModal,
-      location: formDataFromModal.location || "Unspecified", 
-      owner: ownerId, 
+      owner: ownerId,   
     };
 
       try {
@@ -136,6 +135,32 @@
           const errorMessage = error instanceof Error ? error.message : "Could not add field";
           alert(`Error: ${errorMessage}`);
           throw new Error(errorMessage);
+      }
+    };
+
+    const handleDeleteField = async (id: string) => {
+      // Tìm tên field để hiển thị trong hộp thoại xác nhận
+      const fieldToDelete = fields.find(f => f.id === id);
+      const fieldName = fieldToDelete ? fieldToDelete.name : 'this field';
+
+      // LUÔN LUÔN hỏi xác nhận trước khi xóa!
+      if (!window.confirm(`Are you sure you want to delete "${fieldName}"? This will delete all associated devices and data, and cannot be undone.`)) {
+        return;
+      }
+      
+      try {
+        // Gọi API backend để xóa
+        await del(`/zones/${id}`);
+
+        // Cập nhật UI bằng cách xóa field khỏi state
+        setFields(prevFields => prevFields.filter(field => field.id !== id));
+        
+        // (Tùy chọn) Hiển thị thông báo thành công
+        alert(`Field "${fieldName}" has been deleted successfully.`);
+
+      } catch (error) {
+        console.error(`Failed to delete field ${id}:`, error);
+        alert("Error: Could not delete the field. Please try again.");
       }
     };
 
@@ -216,7 +241,7 @@
               style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
               {fields.map((field) => (
-                <FieldCard key={field.id} field={field} onClick={() => console.log(`Clicked on ${field.name}`)} />
+                <FieldCard key={field.id} field={field} onClick={() => console.log(`Clicked on ${field.name}`)} onDelete={handleDeleteField} />
               ))}
               {(!loading && fields.length === 0) && (
                 <div className="text-gray-500">No fields yet.</div>

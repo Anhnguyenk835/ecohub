@@ -94,3 +94,23 @@ class DeviceService:
         except Exception as e:
             logger.error(f"Error deleting device {device_id}: {str(e)}")
             return False
+        
+    async def delete_devices_by_zone(self, zone_id: str) -> bool:
+        try:
+            query = self.collection.where('zoneId', '==', zone_id)
+            docs = await run_in_threadpool(query.stream)
+            
+            batch = db.batch()
+            count = 0
+            for doc in docs:
+                batch.delete(doc.reference)
+                count += 1
+            
+            if count > 0:
+                await run_in_threadpool(batch.commit)
+            
+            logger.info(f"Deleted {count} devices for zone {zone_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting devices for zone {zone_id}: {e}", exc_info=True)
+            return False

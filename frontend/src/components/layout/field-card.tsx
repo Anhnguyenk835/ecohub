@@ -1,12 +1,12 @@
 "use client"
 
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, Trash2 } from "lucide-react"
 
 export interface FieldData {
   id: string
   name: string
   area: string
-  status: "Good" | "Need water" | "Warning" | "Critical"
+  status: "Good" | "Need water" | "Warning" | "Critical" | "Unknown" | "Error" | string;
   image: string
   lastUpdated?: string
 }
@@ -14,9 +14,10 @@ export interface FieldData {
 interface FieldCardProps {
   field: FieldData
   onClick?: () => void
+  onDelete?: (id: string) => void;
 }
 
-export function FieldCard({ field, onClick }: FieldCardProps) {
+export function FieldCard({ field, onClick, onDelete }: FieldCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Good":
@@ -32,12 +33,28 @@ export function FieldCard({ field, onClick }: FieldCardProps) {
     }
   }
 
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); 
+    if (onDelete) {
+      onDelete(field.id);
+    }
+  };
+
   return (
     <div
-      className="flex-shrink-0 w-97 bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer group overflow-hidden"
+      className="flex-shrink-0 w-80 bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer group overflow-hidden"
       onClick={onClick}
     >
       <div className="relative">
+        {onDelete && (
+          <button
+            onClick={handleDeleteClick}
+            className="absolute top-2 right-2 z-20 p-2 bg-white/70 rounded-full text-red-500 opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white transition-all"
+            aria-label={`Delete field ${field.name}`}
+          >
+            <Trash2 size={18} />
+          </button>
+        )}
         <img
           src={
             field.image || "/placeholder.svg"

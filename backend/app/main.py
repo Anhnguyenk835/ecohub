@@ -25,7 +25,9 @@ from app.action_log.action_log_route import router as action_log_router
 
 from app.services import mqtt_service
 from app.services.firebase_auth import get_verified_user
-from app.middleware.auth import AuthMiddleware
+
+# from app.middleware.auth import AuthMiddleware
+
 
 logger = get_logger(__name__)
 
@@ -56,10 +58,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+origins = [
+    "http://localhost:3000", 
+]
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this appropriately for production
+    allow_origins=origins,   # Configure this appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -132,7 +138,6 @@ async def log_requests(request, call_next):
     )
     
     return response
-
 
 if __name__ == "__main__":
     import uvicorn
