@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Droplets, Fan, Lightbulb, Power, Wifi, AlertTriangle } from "lucide-react";
-// import mqtt from "mqtt/dist/mqtt";
+import mqtt from "mqtt/dist/mqtt";
 
 /**
  * EcoHub – Circular On/Off Toggles (React + MQTT over WebSocket)
@@ -57,7 +57,15 @@ const DEVICES: DeviceConfig[] = [
     offPayload: 'TURN_HEATER_OFF',
     icon: 'power',
   },
-  // Thêm đèn sau
+  {
+    id: "light",
+    label: "Light",
+    statusTopic: "ecohub/light/status",
+    commandTopic: "ecohub/area1/commands",
+    onPayload: "TURN_LIGHT_ON",
+    offPayload: "TURN_LIGHT_OFF",
+    icon: "light", // nhớ là "light" đã được xử lý ở phần icon
+  },
 ];
 
 function CircleButton({
@@ -94,9 +102,11 @@ function CircleButton({
       disabled={disabled}
       aria-pressed={active}
       className={[
-        "relative select-none w-28 h-28 rounded-full grid place-items-center",
-        "shadow-lg ring-1 ring-black/5 transition-all",
-        active ? "bg-emerald-500 text-white hover:scale-105" : "bg-neutral-800 text-neutral-100 hover:scale-105",
+        "relative select-none w-40 h-40 rounded-full grid place-items-center",
+        "shadow-lg ring-2 transition-all duration-200 ease-out",
+        active
+          ? "bg-green-400 text-white ring-green-400 hover:scale-105"
+          : "bg-red-400 text-white ring-red-400 hover:scale-105",
         disabled ? "opacity-50 cursor-not-allowed hover:scale-100" : "",
       ].join(" ")}
     >
@@ -197,13 +207,8 @@ export default function EcoHubSwitches({ embedded = false }: { embedded?: boolea
   };
 
   return (
-    <div
-      className={
-        (embedded ? "" : "min-h-screen ") +
-        "w-full bg-neutral-900 text-neutral-50 px-6 py-8 rounded-2xl overflow-hidden"
-      }
-    >
-      <div className="max-w-4xl mx-auto grid gap-6">
+    <div className="w-full max-w-screen-xl flex flex-col gap-10">
+      <div className="max-w-6xl mx-auto flex flex-col justify-center gap-10 h-full">
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">EcoHub – Điều khiển thiết bị</h1>
           <div className="flex items-center gap-2">
@@ -223,8 +228,8 @@ export default function EcoHubSwitches({ embedded = false }: { embedded?: boolea
 
         {/* Sensor strip (optional) */}
         {lastSensor && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-2xl p-4 bg-neutral-800/70 shadow border border-white/5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-10 justify-center items-start">
+            <div className="rounded-2xl p-4 bg-zinc-800/80 shadow-md border border-white/10">
               <div className="text-sm opacity-70">Nhiệt độ</div>
               <div className="text-xl font-medium">{lastSensor.temperature ?? "–"} °C</div>
             </div>
@@ -261,11 +266,6 @@ export default function EcoHubSwitches({ embedded = false }: { embedded?: boolea
                 </div>
               );
             })}
-          </div>
-          <div className="text-xs opacity-70 mt-4">
-            • Nút hiển thị theo trạng thái thật từ topic status (retained). Khi bấm, web gửi lệnh lên topic
-            commands và chờ phản hồi trạng thái để xác nhận. Nếu không có phản hồi trong 3 giây, trạng thái
-            pending sẽ tự tắt.
           </div>
         </section>
 
