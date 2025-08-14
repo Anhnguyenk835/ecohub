@@ -1,12 +1,12 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
-from typing import List, Dict
+from typing import List, Dict, Any
 
 from app.zone.zone_model import ZoneCreate, ZoneUpdate, ZoneResponse
 from app.zone.zone_service import ZoneService
 from app.utils.logger import get_logger
 
 from app.zone_status.zone_status_route import router as zone_status_router
-
+from app.services.firebase_auth import get_verified_user 
 # Giả sử bạn có một dependency để lấy user hiện tại, nếu không có, owner_id phải được truyền vào.
 # from app.auth.dependencies import get_current_user 
 
@@ -41,6 +41,16 @@ async def create_zone(zone_data: ZoneCreate):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not create zone")
     
     return ZoneResponse(**created_zone)
+
+@router.get("/user/my-zones", response_model=List[Dict[str, Any]])
+async def get_my_zones_with_status(user: dict = Depends(get_verified_user)):
+    """
+    Lấy danh sách tất cả các zone của người dùng đang đăng nhập,
+    kèm theo trạng thái mới nhất của chúng.
+    """
+    owner_id = user["uid"]
+    zones_with_status = await zone_service.get_zones_with_status_by_owner(owner_id)
+    return zones_with_status
 
 @router.get("/", response_model=List[ZoneResponse])
 async def get_all_zones_for_owner(owner_id: str = Query(..., description="ID của người dùng để lọc các khu vực")):

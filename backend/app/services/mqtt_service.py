@@ -4,7 +4,6 @@ import json
 import paho.mqtt.client as mqtt
 from app.config import settings
 from app.utils.logger import get_logger
-from app.shared import manager, main_loop
 from app.zone_status.zone_status_service import ZoneStatusService
 from app.readings_history.reading_history_service import ReadingHistoryService
 from app.sensor.sensor_service import SensorService
@@ -17,14 +16,17 @@ logger = get_logger(__name__)
 mqtt_client = mqtt.Client(client_id=settings.mqtt_client_id,
                           callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
 
-
 zone_status_service = ZoneStatusService()
 reading_history_service = ReadingHistoryService()
 sensor_service = SensorService()
 zone_service = ZoneService()
 
-def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) -> str:
+async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) -> str:
     overall_status = "Good" 
+    suggestion = None
+    
+    zone_info = await zone_service.get_zone(zone_id)
+    zone_name = zone_info.get("name", zone_id) if zone_info else zone_id
 
     for sensor_type, settings in thresholds.items():
         if not settings or not settings.get("enabled"):
@@ -37,30 +39,34 @@ def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) -> str:
 
             if sensor_type == "temperature":
                 if current_value < min_val:
-                    msg = f"Zone temperature is too low ({current_value})"
+                    msg = f"Zone '{zone_name}': temperature is too low ({current_value})"
                     overall_status = "Too Cool" 
-                    publish_notification(zone_id, overall_status, msg, "TURN_HEATER_ON")
+                    suggestion = "TURN_HEATER_ON"
+                    publish_notification(zone_id, overall_status, msg, suggestion)
 
-                    return overall_status
+                    return overall_status, suggestion
                 elif current_value > max_val:
-                    msg = f"Zone temperature is too high ({current_value})"
+                    msg = f"Zone '{zone_name}': temperature is too high ({current_value})"
                     overall_status = "Too Hot"
-                    publish_notification(zone_id, overall_status, msg, "TURN_FAN_ON")
-                    return overall_status
+                    suggestion = "TURN_FAN_ON"
+                    publish_notification(zone_id, overall_status, msg, suggestion)
+                    return overall_status, suggestion
                 
             if sensor_type == "soilMoisture":
                 if current_value < min_val:
-                    msg = f"Soil is too dry ({current_value}%). Watering is recommended."
+                    msg = f"Zone '{zone_name}': soil is too dry ({current_value}%). Watering is recommended."
                     overall_status = "Need water"
-                    publish_notification(zone_id, overall_status, msg, "PUMP_WATER_ON")
-                    return overall_status
+                    suggestion = "PUMP_WATER_ON"
+                    publish_notification(zone_id, overall_status, msg, suggestion)
+                    return overall_status, suggestion
 
             if sensor_type == "lightIntensity":
                 if current_value < min_val:
-                    msg = f"Light intensity is too low ({current_value} lux)."
+                    msg = f"Zone '{zone_name}': Light intensity is too low ({current_value} lux)."
                     overall_status = "Need light"
-                    publish_notification(zone_id, overall_status, msg, "TURN_LIGHT_ON")
-                    return overall_status
+                    suggestion = "TURN_LIGHT_ON"
+                    publish_notification(zone_id, overall_status, msg, suggestion)
+                    return overall_status, suggestion
 
             is_out_of_bounds = False
             # Min
@@ -76,7 +82,7 @@ def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) -> str:
             if is_out_of_bounds:
                 overall_status = "Warning" 
     
-    return overall_status
+    return overall_status, suggestion
 
 def publish_notification(zone_id: str, alert_type: str, message: str, suggestion: str):
     """Gửi một thông báo/cảnh báo lên topic notifications của một zone cụ thể."""
@@ -98,6 +104,21 @@ def publish_notification(zone_id: str, alert_type: str, message: str, suggestion
     except Exception as e:
         logger.error(f"Exception while publishing notification: {e}")
 
+def publish_status_update(zone_id: str, status_payload: dict):
+    """Gửi tin nhắn cập nhật trạng thái của một zone."""
+    try:
+        # Topic này dành riêng cho việc cập nhật UI
+        update_topic = f"ecohub/zones/{zone_id}/status_update"
+        json_payload = json.dumps(status_payload, default=str) # default=str để xử lý datetime
+        
+        result = mqtt_client.publish(update_topic, json_payload, qos=1)
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            logger.info(f"STATUS UPDATE SENT to '{update_topic}'")
+        else:
+            logger.error(f"Failed to send status update to '{update_topic}'. RC: {result.rc}")
+    except Exception as e:
+        logger.error(f"Exception while publishing status update: {e}")
+
 async def process_sensor_data(zone_id: str, payload_data: dict):
     logger.info(f"Processing data for zone_id: {zone_id}")
     now = datetime.utcnow() 
@@ -108,22 +129,26 @@ async def process_sensor_data(zone_id: str, payload_data: dict):
     zone_doc = await zone_service.get_zone(zone_id)
     thresholds = zone_doc.get("thresholds", {})
 
-    calculated_status = evaluate_thresholds(zone_id, payload_data, thresholds)
+    calculated_status, calculated_suggestion = await evaluate_thresholds(zone_id, payload_data, thresholds)
     logger.info(f"Calculated status for zone {zone_id} is: '{calculated_status}'")
 
     # Update collection zone_status
     try:
         status_update_payload = {
             "status": calculated_status, 
-            "lastReadings": payload_data
+            "lastReadings": payload_data,
+            "suggestion": calculated_suggestion
             # Bạn có thể thêm logic so sánh ngưỡng và cập nhật "status" ở đây
             # "status": calculate_overall_status(payload_data, thresholds)
         }
         
         # Call service for update
-        await zone_status_service.update_zone_status(zone_id, status_update_payload)
+        updated_status = await zone_status_service.update_zone_status(zone_id, status_update_payload)
         logger.info(f"Successfully updated zone_status for zone_id: {zone_id}")
 
+        if updated_status:
+            publish_status_update(zone_id, updated_status)
+            
     except Exception as e:
         logger.error(f"Error updating zone_status for zone_id {zone_id}: {e}", exc_info=True)
     
@@ -201,33 +226,13 @@ def on_message(client, userdata, msg):
         topic_parts = msg.topic.split('/')
         if len(topic_parts) == 3 and topic_parts[0] == "ecohub" and topic_parts[2] == "sensors":
             zone_id = topic_parts[1]
-            message_type = topic_parts[2]
             payload_str = msg.payload.decode('utf-8')
             logger.info(f"Received message on topic {msg.topic} for zone_id {zone_id}")
 
-            if message_type == "sensors":
-                data = json.loads(payload_str)
-                logger.debug("Successfully parsed JSON data.")
+            data = json.loads(payload_str)
+            logger.debug("Successfully parsed JSON data.")
 
-                asyncio.run(process_sensor_data(zone_id, data))
-                # Chạy hàm xử lý async trong một event loop mới
-                # if main_loop:
-                #     asyncio.run_coroutine_threadsafe(
-                #         process_sensor_data(zone_id, data), 
-                #         main_loop
-                #     )
-                # else:
-                #     logger.error("Main event loop not available. Cannot process sensor data.")
-
-        # elif len(topic_parts) == 3 and topic_parts[0] == "ecohub" and topic_parts[2] == "notifications":
-        #     logger.info(f"Broadcasting NOTIFICATION for zone_id {zone_id} to web clients")
-        #     if main_loop:
-        #             asyncio.run_coroutine_threadsafe(
-        #                 manager.broadcast_to_zone(zone_id, payload_str), 
-        #                 main_loop
-        #             )
-        #     else:
-        #         logger.error("Main event loop not available. Cannot broadcast notification.")
+            asyncio.run(process_sensor_data(zone_id, data))
         else:
             logger.warning(f"Received message on an unhandled topic format: {msg.topic}")
     except json.JSONDecodeError:

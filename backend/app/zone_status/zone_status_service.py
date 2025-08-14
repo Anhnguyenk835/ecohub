@@ -80,3 +80,11 @@ class ZoneStatusService:
         except Exception as e:
             logger.error(f"Error deleting status for zone {zone_id}: {e}", exc_info=True)
             return False
+        
+    async def get_status_by_zone_id(self, zone_id: str) -> dict:
+        """
+        Lấy document status của một zone bằng ID.
+        Đây là một alias cho get_zone_status để nhất quán.
+        """
+        status = await self.get_zone_status(zone_id)
+        return status if status is not None else {}

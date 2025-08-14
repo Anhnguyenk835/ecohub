@@ -20,10 +20,39 @@ class ZoneService:
         self.collection_name = collection_name
         self.collection = db.collection(collection_name)
 
+        self.status_collection = db.collection("zone_status")
+        
         self.zone_status_service = ZoneStatusService()
         self.device_service = DeviceService()
         self.actuator_service = ActuatorService()
         self.sensor_service = SensorService()
+    
+    async def get_zones_with_status_by_owner(self, owner_id: str) -> List[Dict[str, Any]]:
+        """
+        Lấy tất cả các zone của một owner, và "ghép" chúng với trạng thái mới nhất
+        từ collection zone_status.
+        """
+        # Lấy danh sách các zone cơ bản
+        zones = await self.get_zones_by_owner(owner_id)
+        
+        # Lấy ID của tất cả các zone
+        zone_ids = [zone['id'] for zone in zones]
+        if not zone_ids:
+            return []
+
+        # Lấy tất cả các document status tương ứng trong một lần truy vấn
+        status_docs = await asyncio.to_thread(
+            self.status_collection.where('__name__', 'in', zone_ids).get
+        )
+        
+        # Tạo một "bản đồ" từ zone_id sang status_data để tra cứu nhanh
+        status_map = {doc.id: doc.to_dict() for doc in status_docs}
+        
+        # Ghép dữ liệu status vào từng zone
+        for zone in zones:
+            zone['status'] = status_map.get(zone['id'], {"status": "Unknown"})
+            
+        return zones
 
     async def create_zone(self, zone_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Tạo một zone mới trong Firestore."""

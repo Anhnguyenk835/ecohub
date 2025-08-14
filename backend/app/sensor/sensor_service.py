@@ -13,7 +13,7 @@ class SensorService:
     def __init__(self, collection_name: str = "sensors"):
         self.collection_name = collection_name
         self.collection = db.collection(collection_name)
-
+    
     async def create_sensor(self, sensor_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Tạo một sensor mới trong Firestore."""
         try:

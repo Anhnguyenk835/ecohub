@@ -5,6 +5,7 @@ import Image from "next/image"
 import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 export function Navbar() {
   const { signOut } = useAuth()
@@ -57,9 +58,7 @@ export function Navbar() {
 
         {/* Right side icons */}
         <div className="flex items-center space-x-4 mr-2">
-          <button className="p-2 text-white hover:text-green-700 transition-colors cursor-pointer focus:outline-none focus:ring-0">
-            <Bell className="w-6 h-6" />
-          </button>
+          <NotificationBell/>
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setOpen((v) => !v)}
