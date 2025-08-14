@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # Command topic is optional at load time to avoid validation errors;
     # we validate presence in validate_settings()
     mqtt_command_topic: Optional[str] = os.getenv("MQTT_COMMAND_TOPIC")
+    
 
     # Threshold Configuration
     TEMP_THRESHOLD_HIGH: float = float(os.getenv("TEMP_THRESHOLD_HIGH", 35.0))
@@ -91,4 +92,3 @@ def get_settings() -> Settings:
 
 # Global settings instance
 settings = get_settings()
-

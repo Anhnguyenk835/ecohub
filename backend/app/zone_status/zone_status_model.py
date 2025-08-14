@@ -11,6 +11,9 @@ class LastReadings(BaseModel):
     ph: Optional[float] = Field(None, alias="pH", description="Most recent pH value")
     co2: Optional[float] = Field(None, validation_alias=AliasChoices('co2', 'Co2'), description="Most recent Co2 value (ppm)")
 
+    class Config:
+        populate_by_name = True
+
 class ZoneStatusBase(BaseModel):
     """Base model cho trạng thái của một khu vực."""
     status: str = Field(..., description="Overall status of Zone (E.g: Good, Warning, Danger)")
