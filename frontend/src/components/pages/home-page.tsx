@@ -7,6 +7,7 @@
   import { AddFieldModal } from "../layout/AddFieldModal"
   import { get, post, del } from "@/lib/api"
   import { useAuth } from "@/contexts/AuthContext"  
+  import { useRouter } from "next/navigation"
 
   export default function HomePage() {
     const [scrollPosition, setScrollPosition] = useState(0)
@@ -17,6 +18,7 @@
     const { user } = useAuth()
     const containerRef = useRef<HTMLDivElement | null>(null)
     const [hasOverflow, setHasOverflow] = useState(false)
+    const router = useRouter()
 
     const ownerId = useMemo(() => {
       if (user?.uid) return user.uid
@@ -31,12 +33,14 @@
         setLoading(true)
         setError(null)
         try {
-          const zonesData = await get<any[]>(`/zones?owner_id=${encodeURIComponent(ownerId)}`)
+          type Zone = { id: string; name: string; location?: string }
+          const zonesData = await get<Zone[]>(`/zones?owner_id=${encodeURIComponent(ownerId)}`)
 
           if (zonesData && zonesData.length > 0) {
 
+            type ZoneStatus = { status?: string }
             const statusPromises = zonesData.map(zone => 
-              get<any>(`/zones/${zone.id}/status/`).catch(e => { // <-- DÒNG NÀY ĐÃ ĐƯỢC SỬA
+              get<ZoneStatus>(`/zones/${zone.id}/status/`).catch(e => { // <-- DÒNG NÀY ĐÃ ĐƯỢC SỬA
 
                 console.error(`Failed to fetch status for zone ${zone.id}`, e);
                 return { status: 'Error' }; 
@@ -44,6 +48,8 @@
             );
 
             const statuses = await Promise.all(statusPromises);
+
+            console.log("statuses", statuses)
 
             const mapped: FieldData[] = zonesData.map((z, index) => ({
               id: z.id,
@@ -58,8 +64,9 @@
             if (!cancelled) setFields([]);
           }
 
-        } catch (e: any) {
-          if (!cancelled) setError(e?.message || 'Failed to load fields')
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'Failed to load fields'
+          if (!cancelled) setError(message)
         } finally {
           if (!cancelled) setLoading(false)
         }
@@ -103,7 +110,8 @@
       return scrollPosition < maxScroll
     })()
 
-  const handleCreateField = async (formDataFromModal: any) => {
+  type CreateZoneRequest = { name: string; location?: string }
+  const handleCreateField = async (formDataFromModal: CreateZoneRequest) => {
     if (!ownerId) {
       alert("Cannot add field: User not identified.");
       // Ném lỗi để modal biết quá trình submit thất bại
@@ -116,7 +124,8 @@
     };
 
       try {
-        const createdZone = await post<any>('/zones/', newFieldData);
+        type CreatedZone = { id: string; name: string; location?: string }
+        const createdZone = await post<CreatedZone>('/zones/', newFieldData);
 
         const newFieldForUI: FieldData = {
           id: createdZone.id,
@@ -241,7 +250,12 @@
               style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
               {fields.map((field) => (
-                <FieldCard key={field.id} field={field} onClick={() => console.log(`Clicked on ${field.name}`)} onDelete={handleDeleteField} />
+                <FieldCard
+                  key={field.id}
+                  field={field}
+                  onClick={() => router.push(`/dashboard/${field.id}`)}
+                  onDelete={handleDeleteField}
+                />
               ))}
               {(!loading && fields.length === 0) && (
                 <div className="text-gray-500">No fields yet.</div>

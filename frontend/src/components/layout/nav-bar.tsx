@@ -37,7 +37,12 @@ export function Navbar() {
     <header className="bg-[#29513F]">
       <div className="flex items-center justify-between h-16 px-4">
         {/* Logo */}
-        <div className="flex items-center space-x-3 ml-4">
+        <div
+          className="flex items-center space-x-3 ml-4 cursor-pointer select-none"
+          onClick={() => router.push('/home')}
+          role="button"
+          aria-label="Go to home"
+        >
           <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden">
             <Image
               src="/Logo.png"

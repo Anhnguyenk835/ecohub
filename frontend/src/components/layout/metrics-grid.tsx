@@ -49,50 +49,68 @@ function MetricCard({ title, value, unit, description, icon, variant = "default"
   )
 }
 
-export default function MetricsGrid() {
+export type ZoneStatusReadings = {
+  temperature?: number
+  airHumidity?: number
+  soilMoisture?: number
+  pH?: number
+  lightIntensity?: number
+  co2?: number
+}
+
+export default function MetricsGrid({
+  readings,
+  overallStatus,
+}: {
+  readings?: Partial<ZoneStatusReadings>
+  overallStatus?: string
+}) {
+  const formatNumber = (value: number | undefined, fractionDigits = 0): string => {
+    if (value === undefined || value === null || Number.isNaN(value)) return "—"
+    return value.toFixed(fractionDigits)
+  }
+
   const metrics = [
     {
       title: "Health",
-      value: "92",
-      unit: "%",
-      description: "Excellent health",
+      value: overallStatus ?? "—",
+      description: "Overall field condition",
       icon: <Leaf className="h-6 w-6" />,
-      variant: "success" as const,
-      badge: "Good",
-    },
-    {
-      title: "Wind",
-      value: "2",
-      unit: "m/s",
-      description: "Make sure there is still adequate airflow",
-      icon: <Wind className="h-6 w-6" />,
+      variant: overallStatus ? (overallStatus.toLowerCase().includes("good") ? ("success" as const) : ("default" as const)) : ("default" as const),
+      badge: overallStatus ? undefined : undefined,
     },
     {
       title: "Temperature",
-      value: "25",
+      value: `${formatNumber(readings?.temperature, 1)}`,
       unit: "°C",
       description: "Maintain temperature consistent",
       icon: <Thermometer className="h-6 w-6" />,
     },
     {
-      title: "pH Level",
-      value: "7.6",
-      description: "Add acid compost to balance the pH",
-      icon: <TestTube className="h-6 w-6" />,
-    },
-    {
       title: "Humidity",
-      value: "82",
+      value: `${formatNumber(readings?.airHumidity)}`,
       unit: "%",
       description: "Ensure ventilation is sufficient to prevent mold growth",
       icon: <Droplets className="h-6 w-6" />,
     },
     {
       title: "Soil moisture",
-      value: "62",
+      value: `${formatNumber(readings?.soilMoisture)}`,
       unit: "%",
       description: "Keep monitoring to ensure it remains consistent",
       icon: <Waves className="h-6 w-6" />,
+    },
+    {
+      title: "pH Level",
+      value: `${formatNumber(readings?.pH, 1)}`,
+      description: "Add acid compost to balance the pH",
+      icon: <TestTube className="h-6 w-6" />,
+    },
+    {
+      title: "Light",
+      value: `${formatNumber(readings?.lightIntensity)}`,
+      description: "Lighting level",
+      icon: <Wind className="h-6 w-6" />,
     },
   ]
 

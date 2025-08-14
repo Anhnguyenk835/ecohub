@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useParams, usePathname } from "next/navigation"
 import { LayoutGrid, Server, FileText, Cloud, Settings as SettingsIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -11,21 +11,24 @@ type NavItem = {
   Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
 }
 
-const items: NavItem[] = [
-  { label: "Information", href: "/dashboard", Icon: LayoutGrid },
-  { label: "Device Control", href: "/dashboard/device-control", Icon: Server },
-  { label: "Schedule", href: "/dashboard/schedule", Icon: FileText },
-  { label: "Predictions", href: "/dashboard/predictions", Icon: Cloud },
-  { label: "Settings", href: "/dashboard/settings", Icon: SettingsIcon },
+const items: Array<{ label: string; path: string; Icon: NavItem["Icon"] }> = [
+  { label: "Information", path: "information", Icon: LayoutGrid },
+  { label: "Device Control", path: "device-control", Icon: Server },
+  { label: "Schedule", path: "schedule", Icon: FileText },
+  { label: "Predictions", path: "predictions", Icon: Cloud },
+  { label: "Settings", path: "settings", Icon: SettingsIcon },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const params = useParams<{ zoneId?: string }>()
+  const zoneId = params?.zoneId
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0">
       <nav className="px-3 py-8 space-y-2">
-        {items.map(({ label, href, Icon }) => {
+        {items.map(({ label, path, Icon }) => {
+          const href = zoneId ? `/dashboard/${zoneId}/${path}` : `/dashboard/${path}`
           const isActive = pathname === href
           return (
             <Link
