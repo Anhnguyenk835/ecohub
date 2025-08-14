@@ -8,7 +8,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Prefix thể hiện status là tài nguyên con của zone
-router = APIRouter(prefix="/zones/{zone_id}/status", tags=["zone status"])
+router = APIRouter(prefix="/{zone_id}/status", tags=["zone status"])
 zone_status_service = ZoneStatusService()
 
 @router.get("/", response_model=ZoneStatusResponse)

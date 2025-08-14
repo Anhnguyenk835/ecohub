@@ -1,8 +1,15 @@
+import asyncio
+from datetime import datetime
 import json
 import paho.mqtt.client as mqtt
 from app.config import settings
 from app.utils.logger import get_logger
-from app.services.database import db  # Giả sử bạn có firebase_service
+
+from app.zone_status.zone_status_service import ZoneStatusService
+from app.readings_history.reading_history_service import ReadingHistoryService
+from app.sensor.sensor_service import SensorService
+from app.services.database import db 
+from app.zone.zone_service import ZoneService
 
 logger = get_logger(__name__)
 
@@ -10,105 +17,187 @@ logger = get_logger(__name__)
 mqtt_client = mqtt.Client(client_id=settings.mqtt_client_id,
                           callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
 
+
+zone_status_service = ZoneStatusService()
+reading_history_service = ReadingHistoryService()
+sensor_service = SensorService()
+zone_service = ZoneService()
+
+def evaluate_thresholds(readings: dict, thresholds: dict) -> str:
+    overall_status = "Good" 
+
+    for sensor_type, settings in thresholds.items():
+        if not settings or not settings.get("enabled"):
+            continue
+
+        if sensor_type in readings:
+            current_value = readings[sensor_type]
+            min_val = settings.get("min")
+            max_val = settings.get("max")
+
+            if sensor_type == "temperature":
+                if current_value < min_val:
+                    overall_status = "Too Cool" 
+                    return overall_status
+                elif current_value > max_val:
+                    overall_status = "Too Hot"
+                    return overall_status
+                
+            if sensor_type == "soilMoisture":
+                if current_value < min_val:
+                    overall_status = "Need water"
+                    return overall_status
+
+            if sensor_type == "lightIntensity":
+                if current_value < min_val:
+                    overall_status = "Need light"
+                    return overall_status
+
+            is_out_of_bounds = False
+            # Min
+            if min_val is not None and current_value < min_val:
+                is_out_of_bounds = True
+                logger.warning(f"THRESHOLD BREACH: {sensor_type} ({current_value}) is BELOW min ({min_val})")
+            
+            # Max
+            if max_val is not None and current_value > max_val:
+                is_out_of_bounds = True
+                logger.warning(f"THRESHOLD BREACH: {sensor_type} ({current_value}) is ABOVE max ({max_val})")
+
+            if is_out_of_bounds:
+                overall_status = "Warning" 
+    
+    return overall_status
+
+async def process_sensor_data(zone_id: str, payload_data: dict):
+    logger.info(f"Processing data for zone_id: {zone_id}")
+    now = datetime.utcnow() 
+
+    readings = payload_data.get("readings", {})
+    actuator_states = payload_data.get("actuatorStates", {})
+
+    zone_doc = await zone_service.get_zone(zone_id)
+    thresholds = zone_doc.get("thresholds", {})
+
+    calculated_status = evaluate_thresholds(payload_data, thresholds)
+    logger.info(f"Calculated status for zone {zone_id} is: '{calculated_status}'")
+
+    # Update collection zone_status
+    try:
+        status_update_payload = {
+            "status": calculated_status, 
+            "lastReadings": payload_data
+            # Bạn có thể thêm logic so sánh ngưỡng và cập nhật "status" ở đây
+            # "status": calculate_overall_status(payload_data, thresholds)
+        }
+        
+        # Call service for update
+        await zone_status_service.update_zone_status(zone_id, status_update_payload)
+        logger.info(f"Successfully updated zone_status for zone_id: {zone_id}")
+
+    except Exception as e:
+        logger.error(f"Error updating zone_status for zone_id {zone_id}: {e}", exc_info=True)
+    
+
+    # Update collection readings_history
+    try:
+        sensors_in_zone = await sensor_service.get_all_sensors(zone_id=zone_id)
+        logger.info(f"DEBUG: Found {len(sensors_in_zone)} sensor(s) for zone_id '{zone_id}'.")
+
+        if not sensors_in_zone:
+            logger.warning(f"No sensors found for zone_id {zone_id}. Cannot save reading history.")
+            return
+
+        # Bước 2b: Tạo một "bản đồ tra cứu" từ type sang sensorId
+        sensor_map = {}
+        for sensor in sensors_in_zone:
+            sensor_id = sensor.get('id')
+            measures = sensor.get('measures', [])
+            if sensor_id and measures:
+                for measure_type in measures:
+                    sensor_map[measure_type] = sensor_id
+        
+        logger.debug(f"Built sensor map for zone {zone_id}: {sensor_map}")
+
+        batch = db.batch()
+        history_collection_ref = reading_history_service.collection
+        records_to_create = 0
+
+        for reading_type, value in payload_data.items():
+            if reading_type == "actuatorStates" or not isinstance(value, (int, float)):
+                continue
+
+            sensor_id = sensor_map.get(reading_type)
+            
+            if sensor_id:
+                history_doc_ref = history_collection_ref.document() 
+                history_data = {
+                    "readAt": now,
+                    "sensorId": sensor_id,
+                    "type": reading_type,
+                    "value": float(value), 
+                    "zoneId": zone_id
+                }
+                batch.set(history_doc_ref, history_data)
+                records_to_create += 1
+            else:
+                logger.warning(f"No matching sensor found for reading type '{reading_type}' in zone {zone_id}.")
+
+        # Bước 2d: Thực thi batch nếu có bản ghi để tạo
+        if records_to_create > 0:
+            await asyncio.to_thread(batch.commit)
+            logger.info(f"Successfully saved {records_to_create} records to readings_history for zone {zone_id}.")
+
+    except Exception as e:
+        logger.error(f"Error saving to readings_history for zone_id {zone_id}: {e}", exc_info=True)
+
 def on_connect(client, userdata, flags, rc):
     """Callback for when the client connects to the broker."""
     if rc == 0:
         logger.info(f"Successfully connected to MQTT Broker: {settings.mqtt_broker_host}")
         # Subscribe to the topic upon connection
-        client.subscribe(settings.mqtt_topic)
-        logger.info(f"Subscribed to topic: {settings.mqtt_topic}")
+        wildcard_topic = settings.mqtt_topic_pattern
+        client.subscribe(wildcard_topic)
+        logger.info(f"Subscribed to topic: {wildcard_topic}")
     else:
         logger.error(f"Failed to connect to MQTT Broker, return code {rc}\n")
 
-def automatic_handle_sensor_logic(sensor_data: dict):
-    """
-    Kiểm tra dữ liệu cảm biến và quyết định có cần gửi lệnh điều khiển không.
-    sensor_data là một dictionary đã được parse từ JSON.
-    """
-    try:
-        # Lấy các giá trị cần thiết từ dữ liệu
-        temperature = sensor_data.get("Temperature")
-        humidity = sensor_data.get("Humidity")
-        soil_moisture = sensor_data.get("Soil Moisture")
-        is_running = sensor_data.get("is_running", False)
-        running_device = sensor_data.get("running_device", "none")
-
-        if is_running:
-            logger.info(f"Logic: Device '{running_device}' is currently running. No new commands will be sent.")
-            return
-
-        # --- Logic cho Quạt (Fan) ---
-        # Chỉ kiểm tra khi hệ thống đang rảnh (is_running = False)
-        if temperature is not None:
-            if temperature > settings.TEMP_THRESHOLD_HIGH:
-                logger.info(f"Logic: High temperature ({temperature}°C). Turning fan ON.")
-                publish_command("TURN_FAN_ON")
-                return # Gửi lệnh xong thì thoát, không kiểm tra các điều kiện khác
-
-        # --- Logic cho Đèn sưởi (Heater) ---
-        # Chỉ kiểm tra khi hệ thống đang rảnh
-        if temperature is not None:
-            if temperature < settings.TEMP_THRESHOLD_LOW:
-                logger.info(f"Logic: Low temperature ({temperature}°C). Turning heater ON.")
-                publish_command("TURN_HEATER_ON")
-                return # Gửi lệnh xong thì thoát
-
-        # --- Logic cho Máy bơm (Pump) ---
-        # Chỉ kiểm tra khi hệ thống đang rảnh
-        if soil_moisture is not None:
-            if soil_moisture < settings.SOIL_MOISTURE_THRESHOLD_LOW:
-                logger.info(f"Logic: Low soil moisture ({soil_moisture}%). Turning pump ON.")
-                publish_command("PUMP_WATER_ON")
-                return # Gửi lệnh xong thì thoát
-
-    except Exception as e:
-        logger.error(f"Error in handle_sensor_logic: {e}")
-
 def on_message(client, userdata, msg):
     """Callback for when a message is received from the broker."""
-    if msg.topic == settings.mqtt_topic:
-        try:
-            payload = msg.payload.decode('utf-8')
-            logger.info(f"Received message on topic {msg.topic}: {payload}")
-            
-            data = json.loads(payload)
-            logger.info("Successfully parsed JSON data.")
+    try:
+        topic_parts = msg.topic.split('/')
+        if len(topic_parts) == 3 and topic_parts[0] == "ecohub" and topic_parts[2] == "sensors":
+            zone_id = topic_parts[1]
+            payload_str = msg.payload.decode('utf-8')
+            logger.info(f"Received message on topic {msg.topic} for zone_id {zone_id}")
 
-            # Lưu dữ liệu vào Firestore
-            doc_ref = db.collection('sensor_data').add(data)
-            logger.info(f"Data saved to Firestore with document ID: {doc_ref[1].id}")
+            data = json.loads(payload_str)
+            logger.debug("Successfully parsed JSON data.")
 
-            automatic_handle_sensor_logic(data)
-
-        except json.JSONDecodeError:
-            logger.error(f"Failed to decode JSON from payload: {msg.payload.decode()}")
-        except Exception as e:
-            logger.error(f"An error occurred in on_message: {e}")
-    else:
-        logger.warning(f"Received message on an unexpected topic: {msg.topic}")
+            # Chạy hàm xử lý async trong một event loop mới
+            asyncio.run(process_sensor_data(zone_id, data))
+        else:
+            logger.warning(f"Received message on an unhandled topic format: {msg.topic}")
+    except json.JSONDecodeError:
+        logger.error(f"Failed to decode JSON from payload: {msg.payload.decode()}")
+    except Exception as e:
+        logger.error(f"An error occurred in on_message: {e}", exc_info=True)
 
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
 
-def publish_command(command: str):
-    """Publishes a command to the command topic."""
+def publish_command(zone_id: str, command: str):
+    """Gửi một lệnh điều khiển tới topic command của một zone cụ thể."""
     try:
-        topic = settings.mqtt_command_topic
-        if not topic:
-            logger.error("MQTT_COMMAND_TOPIC is not set. Cannot publish command.")
-            return False
-        result = mqtt_client.publish(topic, command)
-        # result.is_published() sẽ trả về True nếu thành công
+        command_topic = f"ecohub/{zone_id}/commands"
+        result = mqtt_client.publish(command_topic, command)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info(f"Successfully published command '{command}' to topic '{topic}'")
-
-            logger.info(f"ACTION LOGGED: Command '{command}' sent to devices.")
-
+            logger.info(f"Successfully published command '{command}' to topic '{command_topic}'")
+            # TODO: Log hành động này vào collection action_logs
             return True
         else:
             logger.error(f"Failed to publish command '{command}'. Return code: {result.rc}")
             return False
-        
     except Exception as e:
         logger.error(f"Exception while publishing command: {e}")
         return False

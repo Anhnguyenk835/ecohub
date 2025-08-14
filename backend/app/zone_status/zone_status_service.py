@@ -21,25 +21,26 @@ class ZoneStatusService:
     async def get_zone_status(self, zone_id: str) -> Optional[Dict[str, Any]]:
         """Lấy trạng thái của một khu vực bằng zone_id."""
         try:
-            doc_id = self._get_doc_id(zone_id)
-            doc_ref = self.collection.document(doc_id)
+            # Truy vấn trực tiếp bằng zone_id
+            doc_ref = self.collection.document(zone_id)
             doc = await run_in_threadpool(doc_ref.get)
 
             if doc.exists:
                 status_data = doc.to_dict()
-                # Thêm ID của zone vào để response model có thể sử dụng
-                status_data['id'] = zone_id
+                # Lấy ID từ document để đảm bảo tính chính xác
+                status_data['id'] = doc.id
                 return status_data
+            
+            logger.warning(f"Status document for zone_id '{zone_id}' does not exist.")
             return None
         except Exception as e:
             logger.error(f"Error retrieving status for zone {zone_id}: {str(e)}")
             return None
 
-
     async def create_initial_zone_status(self, zone_id: str) -> Optional[Dict[str, Any]]:
         """Tạo một document status ban đầu cho một zone mới."""
         initial_status_data = {
-            "status": "Unknown",  
+            "status": "Initializing",  
             "actuatorStates": {}, 
             "lastReadings": {},  
         }
@@ -49,17 +50,15 @@ class ZoneStatusService:
     async def update_zone_status(self, zone_id: str, status_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Tạo mới hoặc cập nhật (upsert) trạng thái của một khu vực.
-        Sử dụng `set` với `merge=True` để cập nhật các trường được cung cấp
-        mà không ghi đè toàn bộ document.
         """
         try:
-            doc_id = self._get_doc_id(zone_id)
-            doc_ref = self.collection.document(doc_id)
+            # Truy vấn trực tiếp bằng zone_id
+            doc_ref = self.collection.document(zone_id)
 
             # Luôn cập nhật dấu thời gian
             status_data['lastUpdated'] = datetime.utcnow()
 
-            # Sử dụng set(data, merge=True) là phương pháp hiệu quả để upsert trong Firestore
+            # Sử dụng set(data, merge=True) để upsert
             await run_in_threadpool(doc_ref.set, status_data, merge=True)
             logger.info(f"Status for zone {zone_id} updated successfully.")
 
@@ -73,8 +72,8 @@ class ZoneStatusService:
         
     async def delete_status_for_zone(self, zone_id: str) -> bool:
         try:
-            doc_id = self._get_doc_id(zone_id)
-            doc_ref = self.collection.document(doc_id)
+            # Truy vấn trực tiếp bằng zone_id
+            doc_ref = self.collection.document(zone_id)
             await run_in_threadpool(doc_ref.delete)
             logger.info(f"Deleted status for zone {zone_id}")
             return True

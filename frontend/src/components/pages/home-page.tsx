@@ -36,7 +36,7 @@
           if (zonesData && zonesData.length > 0) {
 
             const statusPromises = zonesData.map(zone => 
-              get<any>(`/zones/${zone.id}/status`).catch(e => {
+              get<any>(`/zones/${zone.id}/status/`).catch(e => { // <-- DÒNG NÀY ĐÃ ĐƯỢC SỬA
 
                 console.error(`Failed to fetch status for zone ${zone.id}`, e);
                 return { status: 'Error' }; 

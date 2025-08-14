@@ -5,6 +5,8 @@ from app.zone.zone_model import ZoneCreate, ZoneUpdate, ZoneResponse
 from app.zone.zone_service import ZoneService
 from app.utils.logger import get_logger
 
+from app.zone_status.zone_status_route import router as zone_status_router
+
 # Giả sử bạn có một dependency để lấy user hiện tại, nếu không có, owner_id phải được truyền vào.
 # from app.auth.dependencies import get_current_user 
 
@@ -12,6 +14,8 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/zones", tags=["zones"])
 zone_service = ZoneService()
+
+router.include_router(zone_status_router)
 
 # Dependency để lấy zone hoặc báo lỗi 404
 async def get_zone_or_404(zone_id: str) -> Dict:

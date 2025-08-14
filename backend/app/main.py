@@ -13,7 +13,6 @@ from app.utils.logger import get_logger
 from app.field.field_route import router as field_router
 from app.user.user_route import router as user_router
 from app.zone.zone_route import router as zone_router
-from app.zone_status.zone_status_route import router as zone_status_router
 from app.sensor.sensor_route import router as sensor_router
 from app.readings_history.reading_history_route import router as reading_history_router
 from app.device.device_route import router as device_router
@@ -25,9 +24,7 @@ from app.action_log.action_log_route import router as action_log_router
 
 from app.services import mqtt_service
 from app.services.firebase_auth import get_verified_user
-
 # from app.middleware.auth import AuthMiddleware
-
 
 logger = get_logger(__name__)
 
@@ -113,7 +110,6 @@ async def send_command_to_device(request: CommandRequest, _=Depends(get_verified
 # app.include_router(field_router)
 app.include_router(user_router)
 app.include_router(zone_router)
-app.include_router(zone_status_router)
 app.include_router(sensor_router)
 app.include_router(reading_history_router)
 app.include_router(device_router)
