@@ -1,9 +1,11 @@
 import asyncio
 from contextlib import asynccontextmanager
 
+from typing import List
+
 from pydantic import BaseModel
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -26,6 +28,8 @@ from app.services import mqtt_service
 from app.services.firebase_auth import get_verified_user
 # from app.middleware.auth import AuthMiddleware
 
+from app.shared import manager, main_loop
+
 logger = get_logger(__name__)
 
 @asynccontextmanager
@@ -34,6 +38,9 @@ async def lifespan(app: FastAPI):
     Application lifespan context manager.
     Handles startup and shutdown events.
     """
+    global main_loop
+    main_loop = asyncio.get_running_loop()
+
     # Startup
     logger.info("Starting FastAPI application...")
     
@@ -56,7 +63,7 @@ app = FastAPI(
 )
 
 origins = [
-    "http://localhost:3000", 
+    "http://localhost:3000"
 ]
 
 # Add CORS middleware
@@ -75,7 +82,7 @@ class CommandRequest(BaseModel):
     command: str
 
 @app.post("/api/command", status_code=200, tags=["Commands"])
-async def send_command_to_device(request: CommandRequest, _=Depends(get_verified_user)):
+async def send_command_to_device(request: CommandRequest):#, _=Depends(get_verified_user)):
     """
     Nhận một lệnh từ client (ví dụ: web dashboard) và publish nó
     đến topic MQTT để thiết bị IoT thực thi.
@@ -119,6 +126,16 @@ app.include_router(alter_router)
 app.include_router(actuator_router)
 app.include_router(action_log_router)
 
+@app.websocket("/ws/status/{zone_id}")
+async def websocket_endpoint(websocket: WebSocket, zone_id: str):
+    await manager.connect(websocket, zone_id)
+    try:
+        while True:
+            # Giữ kết nối mở để lắng nghe (mặc dù chúng ta không xử lý tin nhắn đến)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, zone_id)
+        
 @app.middleware("http")
 async def log_requests(request, call_next):
     """Log all incoming requests."""

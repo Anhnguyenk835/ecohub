@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     mqtt_port: int = int(os.getenv("MQTT_PORT"))
     mqtt_topic: str = os.getenv("MQTT_TOPIC")
     mqtt_topic_pattern: str = os.getenv("MQTT_TOPIC_PATTERN")
+    mqtt_notification_topic: str = os.getenv("MQTT_NOTIFICATION_TOPIC")
     mqtt_client_id: str = os.getenv("MQTT_CLIENT_ID")
     # Command topic is optional at load time to avoid validation errors;
     # we validate presence in validate_settings()
