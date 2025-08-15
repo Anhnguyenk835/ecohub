@@ -82,7 +82,7 @@ export default function ZoneInformationPage() {
         </Card>
 
         <div className="h-[360px] min-h-0">
-          <MetricsGrid readings={readings} overallStatus={overallStatus} />
+          <MetricsGrid readings={readings} overallStatus={overallStatus} zoneId={zoneId} />
         </div>
       </div>
 
@@ -96,7 +96,7 @@ export default function ZoneInformationPage() {
             { id: "T001", name: "Temperature sensor", status: "active" },
             { id: "PH001", name: "pH sensor", status: "warning", warning: "Signal issue since 05:02 AM" },
             { id: "H001", name: "Humidity sensor", status: "active" },
-            { id: "S001", name: "Soil sensor", status: "active" }].map((sensor: any) => (
+            { id: "S001", name: "Soil sensor", status: "active" }].map((sensor: { id: string; name: string; status: string; warning?: string }) => (
             <Card key={sensor.id} className="p-6">
               <CardContent className="p-0">
                 <div className="flex items-start justify-between">

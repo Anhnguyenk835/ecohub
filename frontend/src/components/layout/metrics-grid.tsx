@@ -1,6 +1,10 @@
+"use client"
+
 import type React from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Wind, Thermometer, Droplets, TestTube, Waves, Leaf, ExternalLink } from "lucide-react"
+import ChartPopup from "@/components/ui/chart-popup"
 
 interface MetricCardProps {
   title: string
@@ -10,11 +14,16 @@ interface MetricCardProps {
   icon: React.ReactNode
   variant?: "default" | "success"
   badge?: string
+  onClick?: () => void
+  clickable?: boolean
 }
 
-function MetricCard({ title, value, unit, description, icon, variant = "default", badge }: MetricCardProps) {
+function MetricCard({ title, value, unit, description, icon, variant = "default", badge, onClick, clickable }: MetricCardProps) {
   return (
-    <Card className={`relative ${variant === "success" ? "bg-green-600 text-white" : "bg-white"} h-full`}>
+    <Card 
+      className={`relative ${variant === "success" ? "bg-green-600 text-white" : "bg-white"} h-full ${clickable ? "cursor-pointer hover:shadow-lg transition-shadow" : ""}`}
+      onClick={clickable ? onClick : undefined}
+    >
       <CardContent className="px-6 h-full flex flex-col justify-between">
         <div className="flex items-start justify-between mb-1">
           <div className={`p-1 rounded`}>{icon}</div>
@@ -61,10 +70,41 @@ export type ZoneStatusReadings = {
 export default function MetricsGrid({
   readings,
   overallStatus,
+  zoneId,
 }: {
   readings?: Partial<ZoneStatusReadings>
   overallStatus?: string
+  zoneId?: string
 }) {
+  const [chartPopup, setChartPopup] = useState<{
+    isOpen: boolean
+    metricType: string
+    metricTitle: string
+    metricUnit?: string
+  }>({
+    isOpen: false,
+    metricType: "",
+    metricTitle: "",
+    metricUnit: ""
+  })
+
+  const openChart = (metricType: string, metricTitle: string, metricUnit?: string) => {
+    setChartPopup({
+      isOpen: true,
+      metricType,
+      metricTitle,
+      metricUnit
+    })
+  }
+
+  const closeChart = () => {
+    setChartPopup({
+      isOpen: false,
+      metricType: "",
+      metricTitle: "",
+      metricUnit: ""
+    })
+  }
   const formatNumber = (value: number | undefined, fractionDigits = 0): string => {
     if (value === undefined || value === null || Number.isNaN(value)) return "—"
     return value.toFixed(fractionDigits)
@@ -78,6 +118,7 @@ export default function MetricsGrid({
       icon: <Leaf className="h-6 w-6" />,
       variant: overallStatus ? (overallStatus.toLowerCase().includes("good") ? ("success" as const) : ("default" as const)) : ("default" as const),
       badge: overallStatus ? undefined : undefined,
+      clickable: false, // Health metric is not clickable
     },
     {
       title: "Temperature",
@@ -85,6 +126,9 @@ export default function MetricsGrid({
       unit: "°C",
       description: "Maintain temperature consistent",
       icon: <Thermometer className="h-6 w-6" />,
+      clickable: true,
+      metricType: "temperature",
+      onClick: () => openChart("temperature", "Temperature", "°C"),
     },
     {
       title: "Humidity",
@@ -92,6 +136,9 @@ export default function MetricsGrid({
       unit: "%",
       description: "Ensure ventilation is sufficient to prevent mold growth",
       icon: <Droplets className="h-6 w-6" />,
+      clickable: true,
+      metricType: "airHumidity", 
+      onClick: () => openChart("airHumidity", "Air Humidity", "%"),
     },
     {
       title: "Soil moisture",
@@ -99,35 +146,59 @@ export default function MetricsGrid({
       unit: "%",
       description: "Keep monitoring to ensure it remains consistent",
       icon: <Waves className="h-6 w-6" />,
+      clickable: true,
+      metricType: "soilMoisture",
+      onClick: () => openChart("soilMoisture", "Soil Moisture", "%"),
     },
     {
       title: "pH Level",
       value: `${formatNumber(readings?.pH, 1)}`,
       description: "Add acid compost to balance the pH",
       icon: <TestTube className="h-6 w-6" />,
+      clickable: true,
+      metricType: "ph",
+      onClick: () => openChart("ph", "ph Level"),
     },
     {
       title: "Light",
       value: `${formatNumber(readings?.lightIntensity)}`,
       description: "Lighting level",
       icon: <Wind className="h-6 w-6" />,
+      clickable: true,
+      metricType: "lightIntensity",
+      onClick: () => openChart("lightIntensity", "Light Intensity"),
     },
   ]
 
   return (
-    <div className="grid grid-cols-3 gap-2 h-full">
-      {metrics.map((metric, index) => (
-        <MetricCard
-          key={index}
-          title={metric.title}
-          value={metric.value}
-          unit={metric.unit}
-          description={metric.description}
-          icon={metric.icon}
-          variant={metric.variant}
-          badge={metric.badge}
+    <>
+      <div className="grid grid-cols-3 gap-2 h-full">
+        {metrics.map((metric, index) => (
+          <MetricCard
+            key={index}
+            title={metric.title}
+            value={metric.value}
+            unit={metric.unit}
+            description={metric.description}
+            icon={metric.icon}
+            variant={metric.variant}
+            badge={metric.badge}
+            clickable={metric.clickable}
+            onClick={metric.onClick}
+          />
+        ))}
+      </div>
+      
+      {zoneId && (
+        <ChartPopup
+          isOpen={chartPopup.isOpen}
+          onClose={closeChart}
+          zoneId={zoneId}
+          metricType={chartPopup.metricType}
+          metricTitle={chartPopup.metricTitle}
+          metricUnit={chartPopup.metricUnit}
         />
-      ))}
-    </div>
+      )}
+    </>
   )
 }
