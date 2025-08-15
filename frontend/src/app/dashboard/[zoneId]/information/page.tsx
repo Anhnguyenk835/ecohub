@@ -13,8 +13,8 @@ type ZoneStatusResponse = {
     temperature?: number
     airHumidity?: number
     soilMoisture?: number
-    pH?: number
     lightIntensity?: number
+    pH?: number
     co2?: number
   }
 }
