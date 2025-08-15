@@ -35,11 +35,8 @@ class ReadingHistoryService:
     async def get_readings(
         self,
         zone_id: str,
-        start_date: datetime,
-        end_date: datetime,
         sensor_id: Optional[str] = None,
         type: Optional[str] = None,
-        limit: int = 1000
     ) -> List[Dict[str, Any]]:
         """
         Lấy lịch sử các giá trị đọc được với các bộ lọc.
@@ -47,25 +44,33 @@ class ReadingHistoryService:
         """
         readings = []
         try:
-            # Bắt đầu với các bộ lọc bắt buộc
-            query = self.collection.where('zoneId', '==', zone_id)
-            query = query.where('readAt', '>=', start_date).where('readAt', '<=', end_date)
-
-            # Thêm các bộ lọc tùy chọn
-            if sensor_id:
-                query = query.where('sensorId', '==', sensor_id)
-            if type:
-                query = query.where('type', '==', type)
-
-            # Sắp xếp và giới hạn kết quả
-            query = query.order_by('readAt', direction='DESC').limit(limit)
+            query = self.collection.where(field_path='zoneId', op_string='==', value=zone_id)
             
+            if sensor_id:
+                query = query.where(field_path='sensorId', op_string='==', value=sensor_id)
+            elif type:
+                query = query.where(field_path='type', op_string='==', value=type)
+       
             docs = await run_in_threadpool(query.stream)
+            
+            # Collect all results
+            all_readings = []
             for doc in docs:
                 reading_data = doc.to_dict()
                 reading_data['id'] = doc.id
-                readings.append(reading_data)
-            return readings
+                all_readings.append(reading_data)
+            
+            if sensor_id and type:
+                filtered_readings = [r for r in all_readings if r.get('type') == type]
+            elif not sensor_id and type:
+                filtered_readings = all_readings
+            else:
+                filtered_readings = all_readings
+            
+            filtered_readings.sort(key=lambda x: x.get('readAt', datetime.min), reverse=True)
+            
+            
+            return filtered_readings
         except Exception as e:
             logger.error(f"Error finding reading history: {str(e)}")
             return []
