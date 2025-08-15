@@ -2,8 +2,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Droplets, Fan, Lightbulb, Power, Wifi, AlertTriangle } from "lucide-react";
-import mqtt from "mqtt/dist/mqtt";
-
+import mqtt, { MqttClient } from "mqtt";
+import { post } from '@/lib/api';
+import { toast } from 'sonner';
 /**
  * EcoHub – Circular On/Off Toggles (React + MQTT over WebSocket)
  * - Kết nối MQTT qua WebSocket (NEXT_PUBLIC_MQTT_URL hoặc HiveMQ public).
@@ -17,56 +18,21 @@ import mqtt from "mqtt/dist/mqtt";
  *  <EcoHubSwitches embedded /> // khi nhúng vào một trang khác
  */
 
-type DeviceIcon = "pump" | "fan" | "light" | "power";
-
-interface DeviceConfig {
-  id: string;
-  label: string;
-  statusTopic: string;
-  commandTopic: string;
-  onPayload: string;
-  offPayload: string;
-  icon: DeviceIcon;
+interface ActuatorStates {
+  Fan: 'ON' | 'OFF';
+  Heater: 'ON' | 'OFF';
+  WaterPump: 'ON' | 'OFF';
+  Light: 'ON' | 'OFF';
 }
 
-const DEVICES: DeviceConfig[] = [
-  {
-    id: "pump",
-    label: 'Pump',
-    statusTopic: "ecohub/pump/status",
-    commandTopic: "ecohub/area1/commands",
-    onPayload: "PUMP_WATER_ON",
-    offPayload: "PUMP_WATER_OFF",
-    icon: "pump",
-  },
-  {
-    id: "fan",
-    label: "Fan",
-    statusTopic: "ecohub/fan/status",
-    commandTopic: "ecohub/area1/commands",
-    onPayload: "TURN_FAN_ON",
-    offPayload: "TURN_FAN_OFF",
-    icon: "fan",
-  },
-  {
-    id: 'heater',
-    label: 'Heater',
-    statusTopic: 'ecohub/heater/status',
-    commandTopic: 'ecohub/area1/commands',
-    onPayload: 'TURN_HEATER_ON',
-    offPayload: 'TURN_HEATER_OFF',
-    icon: 'power',
-  },
-  {
-    id: "light",
-    label: "Light",
-    statusTopic: "ecohub/light/status",
-    commandTopic: "ecohub/area1/commands",
-    onPayload: "TURN_LIGHT_ON",
-    offPayload: "TURN_LIGHT_OFF",
-    icon: "light", // nhớ là "light" đã được xử lý ở phần icon
-  },
-];
+const deviceControls = [
+  { name: 'Pump', deviceKey: 'WaterPump', icon: Droplets, commands: { ON: 'PUMP_WATER_ON', OFF: 'PUMP_WATER_OFF' } },
+  { name: 'Fan', deviceKey: 'Fan', icon: Fan, commands: { ON: 'TURN_FAN_ON', OFF: 'TURN_FAN_OFF' } },
+  { name: 'Heater', deviceKey: 'Heater', icon: Power, commands: { ON: 'TURN_HEATER_ON', OFF: 'TURN_HEATER_OFF' } },
+  { name: 'Light', deviceKey: 'Light', icon: Lightbulb, commands: { ON: 'TURN_LIGHT_ON', OFF: 'TURN_LIGHT_OFF' } },
+] as const;
+
+type DeviceIcon = "pump" | "fan" | "light" | "power";
 
 function CircleButton({
   active,
@@ -79,27 +45,15 @@ function CircleButton({
   active: boolean;
   disabled?: boolean;
   label: string;
-  icon: DeviceIcon;
+  icon: React.ElementType; // Sửa lại để nhận component icon trực tiếp
   onClick: () => void;
   pending?: boolean;
 }) {
-  const Icon = useMemo(() => {
-    switch (icon) {
-      case "pump":
-        return Droplets;
-      case "fan":
-        return Fan;
-      case "light":
-        return Lightbulb;
-      default:
-        return Power;
-    }
-  }, [icon]);
-
+  const Icon = icon;
   return (
     <button
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || pending}
       aria-pressed={active}
       className={[
         "relative select-none w-40 h-40 rounded-full grid place-items-center",
@@ -124,37 +78,25 @@ function Pill({ children }: { children: React.ReactNode }) {
   return <div className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs bg-neutral-800 text-neutral-100">{children}</div>;
 }
 
-export default function EcoHubSwitches({ embedded = false }: { embedded?: boolean }) {
+export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
   const [connected, setConnected] = useState(false);
-  const [status, setStatus] = useState<Record<string, "ON" | "OFF" | undefined>>({});
+  const [actuatorStates, setActuatorStates] = useState<ActuatorStates | null>(null);
   const [pending, setPending] = useState<Record<string, boolean>>({});
-  const [lastSensor, setLastSensor] = useState<any>(null);
-  const clientRef = useRef<any>(null);
-
-  // URL MQTT (wss/ws). Ví dụ: wss://broker.hivemq.com:8884/mqtt
-  const wsUrl = process.env.NEXT_PUBLIC_MQTT_URL || "wss://broker.hivemq.com:8884/mqtt";
-  const decoder = useMemo(() => new TextDecoder(), []);
+  const clientRef = useRef<MqttClient | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!zoneId) return;
 
-    const clientId = `ecohub-web-${Math.random().toString(16).slice(2)}`;
-    const client = mqtt.connect(wsUrl, {
-      clientId,
-      keepalive: 30,
-      reconnectPeriod: 2000,
-      connectTimeout: 5000,
-      clean: true,
-      // username: process.env.NEXT_PUBLIC_MQTT_USER,
-      // password: process.env.NEXT_PUBLIC_MQTT_PASS,
-    });
+    const wsUrl = process.env.NEXT_PUBLIC_MQTT_BROKER_URL || "ws://localhost:8884";
+    const client = mqtt.connect(wsUrl);
     clientRef.current = client;
+
+    // Lắng nghe topic sensors của zone cụ thể
+    const sensorTopic = `ecohub/${zoneId}/sensors`;
 
     client.on("connect", () => {
       setConnected(true);
-      DEVICES.forEach((d) => client.subscribe(d.statusTopic));
-      // Tuỳ chọn: nhận strip cảm biến
-      client.subscribe("ecohub/area1/sensors");
+      client.subscribe(sensorTopic, { qos: 1 });
     });
 
     const setOffline = () => setConnected(false);
@@ -163,115 +105,93 @@ export default function EcoHubSwitches({ embedded = false }: { embedded?: boolea
     client.on("error", setOffline);
 
     client.on("message", (topic: string, payload: Uint8Array) => {
-      const text = decoder.decode(payload);
-
-      // status thiết bị
-      DEVICES.forEach((d) => {
-        if (topic === d.statusTopic) {
-          setStatus((s) => ({ ...s, [d.id]: text === "ON" ? "ON" : "OFF" }));
-          setPending((p) => ({ ...p, [d.id]: false }));
-        }
-      });
-
-      // strip cảm biến (optional)
-      if (topic === "ecohub/area1/sensors") {
+      if (topic === sensorTopic) {
         try {
-          const j = JSON.parse(text);
-          setLastSensor(j);
-          if (typeof j.pump_status === "string") {
-            setStatus((s) => ({ ...s, pump: j.pump_status === "ON" ? "ON" : "OFF" }));
+          const data = JSON.parse(payload.toString());
+          // Đọc trạng thái từ object actuatorStates
+          if (data.actuatorStates) {
+            setActuatorStates(data.actuatorStates);
+            setPending({}); // Xóa pending khi nhận được trạng thái mới
           }
-        } catch {
-          /* ignore */
+        } catch (e) {
+          console.error("Failed to parse sensor data:", e);
         }
       }
     });
 
     return () => {
-      try {
-        client.end(true);
-      } catch {}
+      if (clientRef.current) {
+        clientRef.current.end(true);
+      }
     };
-  }, [wsUrl, decoder]);
+  }, [zoneId]);
 
-  const sendCommand = (d: DeviceConfig, nextOn: boolean) => {
-    const client = clientRef.current;
-    if (!client || !connected) return;
+  // Hàm gửi lệnh đã được cập nhật
+  const sendCommand = async (
+    deviceKey: keyof ActuatorStates,
+    commands: { ON: string; OFF: string }
+  ) => {
+    if (!actuatorStates || !connected) {
+      toast.error("Cannot send command: Not connected or initial state not loaded.");
+      return;
+    }
 
-    setPending((p) => ({ ...p, [d.id]: true }));
-    const payload = nextOn ? d.onPayload : d.offPayload;
-    client.publish(d.commandTopic, payload, { qos: 0, retain: false });
+    const currentState = actuatorStates[deviceKey];
+    const nextStateOn = currentState !== "ON";
+    const commandToSend = nextStateOn ? commands.ON : commands.OFF;
 
-    // Tự gỡ pending nếu không có ack sau 3s
-    setTimeout(() => setPending((p) => ({ ...p, [d.id]: false })), 3000);
+    setPending((p) => ({ ...p, [deviceKey]: true }));
+
+    try {
+      // Gửi lệnh qua API
+      await post(`/zones/${zoneId}/command`, { command: commandToSend });
+      toast.success(`Command '${commandToSend}' sent.`);
+    } catch (error) {
+      toast.error("Failed to send command.");
+      setPending((p) => ({ ...p, [deviceKey]: false }));
+    }
   };
 
   return (
-    <div className="w-full max-w-screen-xl flex flex-col gap-10">
-      <div className="max-w-6xl mx-auto flex flex-col justify-center gap-10 h-full">
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold tracking-tight">EcoHub – Điều khiển thiết bị</h1>
-          <div className="flex items-center gap-2">
-            {connected ? (
-              <Pill>
-                <Wifi className="w-4 h-4" />
-                <span>MQTT connected</span>
-              </Pill>
-            ) : (
-              <Pill>
-                <AlertTriangle className="w-4 h-4" />
-                <span>Đang kết nối MQTT…</span>
-              </Pill>
-            )}
-          </div>
-        </header>
+    <div className="p-6 bg-white rounded-lg shadow-md h-full">
+      <header className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">EcoHub – Điều khiển thiết bị</h1>
+        <div className="flex items-center gap-2">
+          {connected ? (
+            <Pill>
+              <Wifi className="w-4 h-4" />
+              <span>MQTT connected</span>
+            </Pill>
+          ) : (
+            <Pill>
+              <AlertTriangle className="w-4 h-4" />
+              <span>Đang kết nối MQTT…</span>
+            </Pill>
+          )}
+        </div>
+      </header>
 
-        {/* Sensor strip (optional) */}
-        {lastSensor && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-10 justify-center items-start">
-            <div className="rounded-2xl p-4 bg-zinc-800/80 shadow-md border border-white/10">
-              <div className="text-sm opacity-70">Nhiệt độ</div>
-              <div className="text-xl font-medium">{lastSensor.temperature ?? "–"} °C</div>
-            </div>
-            <div className="rounded-2xl p-4 bg-neutral-800/70 shadow border border-white/5">
-              <div className="text-sm opacity-70">Độ ẩm</div>
-              <div className="text-xl font-medium">{lastSensor.humidity ?? "–"} %</div>
-            </div>
-            <div className="rounded-2xl p-4 bg-neutral-800/70 shadow border border-white/5">
-              <div className="text-sm opacity-70">Độ ẩm đất</div>
-              <div className="text-xl font-medium">{lastSensor.soil_moisture ?? "–"}</div>
-            </div>
-            <div className="rounded-2xl p-4 bg-neutral-800/70 shadow border border-white/5">
-              <div className="text-sm opacity-70">Trạng thái bơm</div>
-              <div className="text-xl font-medium">{status.pump ?? "–"}</div>
-            </div>
-          </div>
-        )}
-
-        <section>
-          <h2 className="text-lg font-medium mb-3">Thiết bị</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
-            {DEVICES.map((d) => {
-              const isOn = status[d.id] === "ON";
-              return (
-                <div key={d.id} className="grid place-items-center gap-2">
-                  <CircleButton
-                    label={d.label}
-                    icon={d.icon}
-                    active={!!isOn}
-                    pending={!!pending[d.id]}
-                    disabled={!connected}
-                    onClick={() => sendCommand(d, !isOn)}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <footer className="text-xs opacity-60 pt-8">
-        </footer>
-      </div>
+      <section>
+        <h2 className="text-lg font-medium mb-3">Thiết bị</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 justify-items-center">
+          {/* Sử dụng cấu trúc dữ liệu mới để render các nút */}
+          {deviceControls.map((d) => {
+            const isOn = actuatorStates?.[d.deviceKey] === "ON";
+            return (
+              <div key={d.deviceKey} className="grid place-items-center gap-2">
+                <CircleButton
+                  label={d.name}
+                  icon={d.icon} // Truyền thẳng component icon
+                  active={!!isOn}
+                  pending={!!pending[d.deviceKey]}
+                  disabled={!connected || !actuatorStates}
+                  onClick={() => sendCommand(d.deviceKey, d.commands)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

@@ -26,6 +26,8 @@ interface NotificationContextType {
   clearNotifications: () => void;
 }
 
+const LOCAL_STORAGE_KEY = 'ecohub_notifications';
+
 // Tạo Context với giá trị ban đầu là undefined.
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
@@ -33,14 +35,47 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
  * Component Provider: Chịu trách nhiệm quản lý state, logic MQTT,
  * và cung cấp chúng cho các component con.
  */
+// Khởi tạo state từ localStorage
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>(() => {
+    // Chỉ chạy ở phía client
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    try {
+      const item = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (!item) return [];
+      
+      // Parse JSON và chuyển đổi chuỗi timestamp về lại object Date
+      const parsedItems = JSON.parse(item);
+      return parsedItems.map((notif: any) => ({
+        ...notif,
+        timestamp: new Date(notif.timestamp),
+      }));
+    } catch (error) {
+      console.error("Failed to parse notifications from localStorage", error);
+      return [];
+    }
+  });
+
+  // Auto save to local storage
+  useEffect(() => {
+    try {
+      // Chuyển đổi object Date thành chuỗi ISO để lưu trữ an toàn
+      const itemsToStore = notifications.map(notif => ({
+        ...notif,
+        timestamp: notif.timestamp.toISOString(),
+      }));
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(itemsToStore));
+    } catch (error) {
+      console.error("Failed to save notifications to localStorage", error);
+    }
+  }, [notifications]); // useEffect này sẽ chạy mỗi khi `notifications` thay đổi
 
   // Sử dụng useEffect để kết nối MQTT chỉ một lần khi component được mount.
   useEffect(() => {
     // Lấy URL của MQTT Broker từ biến môi trường, có giá trị dự phòng.
-    // const brokerUrl = process.env.NEXT_PUBLIC_MQTT_URL || 'ws://localhost:9001';
-    const brokerUrl = 'wss://broker.hivemq.com:8884/mqtt';
+    const brokerUrl = process.env.NEXT_PUBLIC_MQTT_BROKER_URL || 'ws://localhost:8884';
     const client = mqtt.connect(brokerUrl);
 
     // Xử lý khi kết nối thành công
@@ -111,7 +146,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       timestamp: new Date(),
     };
     // Thêm vào đầu mảng để thông báo mới nhất luôn ở trên cùng
-    setNotifications((prev) => [newNotification, ...prev]);
+    setNotifications((prev) => [newNotification, ...prev.slice(0, 49)]);
   };
 
   /**
@@ -119,6 +154,13 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
    */
   const clearNotifications = () => {
     setNotifications([]);
+
+    try {
+      window.localStorage.removeItem(LOCAL_STORAGE_KEY);
+    } catch (error) {
+      console.error("Failed to clear notifications from localStorage", error);
+    }
+
   };
 
   // Cung cấp state và các hàm cho các component con

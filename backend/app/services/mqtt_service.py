@@ -28,8 +28,10 @@ async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) ->
     zone_info = await zone_service.get_zone(zone_id)
     zone_name = zone_info.get("name", zone_id) if zone_info else zone_id
 
+    issue_status = []
+
     for sensor_type, settings in thresholds.items():
-        if not settings or not settings.get("enabled"):
+        if not settings or not settings.get("enabled") or sensor_type not in readings:
             continue
 
         if sensor_type in readings:
@@ -39,34 +41,53 @@ async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) ->
 
             if sensor_type == "temperature":
                 if current_value < min_val:
-                    msg = f"Zone '{zone_name}': temperature is too low ({current_value})"
+                    msg = f"Zone '{zone_name}': temperature is too low ({current_value}°C)"
                     overall_status = "Too Cool" 
                     suggestion = "TURN_HEATER_ON"
-                    publish_notification(zone_id, overall_status, msg, suggestion)
-
-                    return overall_status, suggestion
+                    
+                    issue_status.append({
+                        "status": overall_status,
+                        "message": msg,
+                        "suggestion": suggestion,
+                        "priority": 2
+                     })
                 elif current_value > max_val:
                     msg = f"Zone '{zone_name}': temperature is too high ({current_value})"
                     overall_status = "Too Hot"
                     suggestion = "TURN_FAN_ON"
-                    publish_notification(zone_id, overall_status, msg, suggestion)
-                    return overall_status, suggestion
+                    
+                    issue_status.append({
+                        "status": overall_status,
+                        "message": msg,
+                        "suggestion": suggestion,
+                        "priority": 2
+                     })
                 
             if sensor_type == "soilMoisture":
                 if current_value < min_val:
                     msg = f"Zone '{zone_name}': soil is too dry ({current_value}%). Watering is recommended."
                     overall_status = "Need water"
                     suggestion = "PUMP_WATER_ON"
-                    publish_notification(zone_id, overall_status, msg, suggestion)
-                    return overall_status, suggestion
+                    
+                    issue_status.append({
+                        "status": overall_status,
+                        "message": msg,
+                        "suggestion": suggestion,
+                        "priority": 1
+                     })
 
             if sensor_type == "lightIntensity":
                 if current_value < min_val:
                     msg = f"Zone '{zone_name}': Light intensity is too low ({current_value} lux)."
                     overall_status = "Need light"
                     suggestion = "TURN_LIGHT_ON"
-                    publish_notification(zone_id, overall_status, msg, suggestion)
-                    return overall_status, suggestion
+
+                    issue_status.append({
+                        "status": overall_status,
+                        "message": msg,
+                        "suggestion": suggestion,
+                        "priority": 0
+                     })
 
             is_out_of_bounds = False
             # Min
@@ -81,6 +102,21 @@ async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) ->
 
             if is_out_of_bounds:
                 overall_status = "Warning" 
+
+
+    if not issue_status:
+        return "Good", None
+
+    for issue in issue_status:
+        publish_notification(zone_id, issue["status"], issue["message"], issue["suggestion"])
+
+    issue_status.sort(key=lambda x: x["priority"], reverse=True)
+
+    most_critical_issue = issue_status[0]
+    overall_status = most_critical_issue["status"]
+    suggestion = most_critical_issue["suggestion"]
+
+    # Chỉ hiện cái status có độ ưu tiên cao nhất ở home, dashboard
     
     return overall_status, suggestion
 

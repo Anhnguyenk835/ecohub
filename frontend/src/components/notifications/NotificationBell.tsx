@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { Bell, X } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns'; // Import hàm mới
 
 // Helper function để lấy màu dựa trên severity
@@ -22,19 +23,31 @@ const getSeverityColor = (severity: 'info' | 'warning' | 'critical') => {
 export default function NotificationBell() {
   const { notifications, clearNotifications } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
-
+  const router = useRouter();
   const unreadCount = notifications.length;
 
   const handleToggle = () => setIsOpen((prev) => !prev);
+
+  const handleNotificationClick = (zoneId: string) => {
+    // Đóng dropdown
+    setIsOpen(false);
+    // Điều hướng đến trang dashboard của zone đó
+    router.push(`/dashboard/${zoneId}`);
+  };
 
   return (
     <div className="relative">
       {/* Nút chuông không thay đổi nhiều */}
       <button
         onClick={handleToggle}
-        className="relative p-2 rounded-full text-gray-300 hover:text-white focus:outline-none"
+        className={`relative p-2 rounded-full focus:outline-none transition-colors
+                    ${isOpen ? 'bg-gray-700 text-yellow-400' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}
       >
-        <Bell className="h-6 w-6" />
+        {isOpen ? (
+          <Bell className="h-6 w-6 fill-yellow-400 text-yellow-400" />
+        ) : (
+          <Bell className="h-6 w-6" />
+        )}
         {unreadCount > 0 && (
           <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">
             {unreadCount}
@@ -48,7 +61,7 @@ export default function NotificationBell() {
           className="origin-top-right absolute right-0 mt-4 w-80 sm:w-96 
                      bg-gray-50 dark:bg-gray-900 rounded-2xl shadow-lg 
                      ring-1 ring-black ring-opacity-5 focus:outline-none
-                     flex flex-col"
+                     flex flex-col z-50"
         >
           {/* Header */}
           <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
@@ -68,7 +81,9 @@ export default function NotificationBell() {
               notifications.map((notif) => (
                 <div 
                   key={notif.id} 
-                  className="flex items-stretch bg-white dark:bg-gray-800 rounded-xl shadow-sm my-2 transition-all hover:shadow-md"
+                  onClick={() => handleNotificationClick(notif.zoneId)}
+                  className="flex items-stretch bg-white dark:bg-gray-800 rounded-xl shadow-sm my-2 
+                             transition-all hover:shadow-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                 >
                   {/* Thanh màu bên trái */}
                   <div className={`w-1.5 rounded-l-xl ${getSeverityColor(notif.severity)}`}></div>
