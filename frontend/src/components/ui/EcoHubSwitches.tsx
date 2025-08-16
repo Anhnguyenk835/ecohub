@@ -18,6 +18,13 @@ import { toast } from 'sonner';
  *  <EcoHubSwitches embedded /> // khi nhúng vào một trang khác
  */
 
+type ActuatorStates = {
+  Fan: 'ON' | 'OFF';
+  Heater: 'ON' | 'OFF';
+  WaterPump: 'ON' | 'OFF';
+  Light: 'ON' | 'OFF';
+};
+
 const initialActuatorStates: ActuatorStates = {
   Fan: 'OFF',
   Heater: 'OFF',
@@ -144,7 +151,9 @@ export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
     commands: { ON: string; OFF: string }
   ) => {
     if (!connected || !deviceOnline) {
-      toast.error("Cannot send command: Not connected to MQTT.");
+      console.log("mqtt connection: ", connected);
+      console.log("device online: ", deviceOnline);
+      toast("Cannot send command: Not connected to MQTT.", { type: "error" });
       return;
     }
 
@@ -157,9 +166,9 @@ export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
     try {
       // Gửi lệnh qua API
       await post(`/zones/${zoneId}/command`, { command: commandToSend });
-      toast.success(`Command '${commandToSend}' sent.`);
+      toast(`Command '${commandToSend}' sent.`, { type: "success" });
     } catch (error) {
-      toast.error("Failed to send command.");
+      toast("Failed to send command.", { type: "error" });
       setPending((p) => ({ ...p, [deviceKey]: false }));
     }
   };

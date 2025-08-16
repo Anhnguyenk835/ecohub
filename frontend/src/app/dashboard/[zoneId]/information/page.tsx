@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import MetricsGrid, { type ZoneStatusReadings } from "@/components/layout/metrics-grid"
 import { get } from "@/lib/api"
+import mqtt from "mqtt"
 
 type ZoneStatusResponse = {
   status?: string
@@ -26,7 +27,9 @@ export default function ZoneInformationPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [zoneStatus, setZoneStatus] = useState<ZoneStatusResponse | null>(null)
+  const clientRef = useRef<any>(null)
 
+  // Initial data fetch
   useEffect(() => {
     let cancelled = false
     async function fetchStatus() {
@@ -49,6 +52,55 @@ export default function ZoneInformationPage() {
     }
   }, [zoneId])
 
+  // Real-time MQTT updates
+  useEffect(() => {
+    if (!zoneId) return
+
+    const wsUrl = process.env.NEXT_PUBLIC_MQTT_BROKER_URL || "ws://localhost:8884"
+    const client = mqtt.connect(wsUrl)
+    clientRef.current = client
+
+    // Subscribe to zone-specific status updates
+    const statusTopic = `ecohub/zones/${zoneId}/status_update`
+
+    client.on("connect", () => {
+      console.log(`MQTT connected for zone ${zoneId} status updates`)
+      client.subscribe(statusTopic, { qos: 1 })
+    })
+
+    client.on("message", (topic: string, payload: Buffer) => {
+      if (topic === statusTopic) {
+        try {
+          const updatedStatusData = JSON.parse(payload.toString())
+          console.log(`Received real-time update for zone ${zoneId}:`, updatedStatusData)
+          
+          // Update zone status with real-time data
+          setZoneStatus(prevStatus => ({
+            ...prevStatus,
+            status: updatedStatusData.status || prevStatus?.status,
+            lastUpdated: updatedStatusData.lastUpdated || prevStatus?.lastUpdated,
+            lastReadings: {
+              ...prevStatus?.lastReadings,
+              ...updatedStatusData.lastReadings
+            }
+          }))
+        } catch (e) {
+          console.error("Error processing real-time status update:", e)
+        }
+      }
+    })
+
+    client.on("error", (err) => {
+      console.error("MQTT error:", err)
+    })
+
+    return () => {
+      if (clientRef.current) {
+        clientRef.current.end(true)
+      }
+    }
+  }, [zoneId])
+
   const readings: Partial<ZoneStatusReadings> | undefined = useMemo(() => zoneStatus?.lastReadings, [zoneStatus])
   const overallStatus = zoneStatus?.status
 
@@ -60,8 +112,28 @@ export default function ZoneInformationPage() {
     return date.toLocaleString()
   }, [zoneStatus?.lastUpdated])
 
+  // Real-time timestamp for live updates
+  const [liveTimestamp, setLiveTimestamp] = useState<string>("")
+  
+  useEffect(() => {
+    if (zoneStatus?.lastUpdated) {
+      const updateTimestamp = () => {
+        const value = zoneStatus.lastUpdated
+        if (!value) return
+        const date = typeof value === "number" ? new Date(value) : new Date(value)
+        if (!isNaN(date.getTime())) {
+          setLiveTimestamp(date.toLocaleString())
+        }
+      }
+      
+      updateTimestamp()
+      const interval = setInterval(updateTimestamp, 1000) // Update every second
+      return () => clearInterval(interval)
+    }
+  }, [zoneStatus?.lastUpdated])
+
   return (
-    <div className="flex gap-4 h-full">
+    <div className="flex gap-4 h-[95%]">
       <div className="flex-1 flex flex-col">
         <Card className="mb-4 flex-[3] min-h-0">
           <CardContent className="p-4">
@@ -72,7 +144,12 @@ export default function ZoneInformationPage() {
                   <div className="text-sm text-gray-600">Status: {overallStatus}</div>
                 )}
                 {formattedUpdated && (
-                  <div className="text-xs text-gray-500">Last updated: {formattedUpdated}</div>
+                  <div className="text-xs text-gray-500">
+                    Last updated: {formattedUpdated}
+                    {liveTimestamp && liveTimestamp !== formattedUpdated && (
+                      <span className="ml-2 text-green-600">• Live: {liveTimestamp}</span>
+                    )}
+                  </div>
                 )}
               </div>
               {loading && <div className="text-sm text-gray-500">Loading…</div>}
@@ -82,6 +159,12 @@ export default function ZoneInformationPage() {
         </Card>
 
         <div className="h-[360px] min-h-0">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-xs text-gray-500">Live updates</span>
+            </div>
+          </div>
           <MetricsGrid readings={readings} overallStatus={overallStatus} zoneId={zoneId} />
         </div>
       </div>
