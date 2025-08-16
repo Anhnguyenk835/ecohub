@@ -18,12 +18,12 @@ import { toast } from 'sonner';
  *  <EcoHubSwitches embedded /> // khi nhúng vào một trang khác
  */
 
-interface ActuatorStates {
-  Fan: 'ON' | 'OFF';
-  Heater: 'ON' | 'OFF';
-  WaterPump: 'ON' | 'OFF';
-  Light: 'ON' | 'OFF';
-}
+const initialActuatorStates: ActuatorStates = {
+  Fan: 'OFF',
+  Heater: 'OFF',
+  WaterPump: 'OFF',
+  Light: 'OFF',
+};
 
 const deviceControls = [
   { name: 'Pump', deviceKey: 'WaterPump', icon: Droplets, commands: { ON: 'PUMP_WATER_ON', OFF: 'PUMP_WATER_OFF' } },
@@ -80,9 +80,10 @@ function Pill({ children }: { children: React.ReactNode }) {
 
 export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
   const [connected, setConnected] = useState(false);
-  const [actuatorStates, setActuatorStates] = useState<ActuatorStates | null>(null);
+  const [actuatorStates, setActuatorStates] = useState<ActuatorStates>(initialActuatorStates);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const clientRef = useRef<MqttClient | null>(null);
+  const [deviceOnline, setDeviceOnline] = useState(false);
 
   useEffect(() => {
     if (!zoneId) return;
@@ -93,18 +94,29 @@ export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
 
     // Lắng nghe topic sensors của zone cụ thể
     const sensorTopic = `ecohub/${zoneId}/sensors`;
+    const deviceStatusTopic = `ecohub/${zoneId}/device_status`;
 
     client.on("connect", () => {
       setConnected(true);
       client.subscribe(sensorTopic, { qos: 1 });
+      client.subscribe(deviceStatusTopic, { qos: 1 });
     });
 
-    const setOffline = () => setConnected(false);
+    const setOffline = () => {
+      setConnected(false);
+      setDeviceOnline(false);
+    };
+
     client.on("reconnect", setOffline);
     client.on("close", setOffline);
     client.on("error", setOffline);
 
     client.on("message", (topic: string, payload: Uint8Array) => {
+      const message = payload.toString();
+      if (topic === deviceStatusTopic) {
+        console.log(`Device status for ${zoneId}: ${message}`);
+        setDeviceOnline(message === 'online');
+      }
       if (topic === sensorTopic) {
         try {
           const data = JSON.parse(payload.toString());
@@ -131,8 +143,8 @@ export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
     deviceKey: keyof ActuatorStates,
     commands: { ON: string; OFF: string }
   ) => {
-    if (!actuatorStates || !connected) {
-      toast.error("Cannot send command: Not connected or initial state not loaded.");
+    if (!connected || !deviceOnline) {
+      toast.error("Cannot send command: Not connected to MQTT.");
       return;
     }
 
