@@ -287,18 +287,49 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
   const trackUserAction = (zoneId: string, command: string, actionText: string) => {
     setNotifications((prev) => {
-      const newActionNotification: Notification = {
-        id: uuidv4(),
-        type: 'Manual Control', // Một loại mới để phân biệt
-        message: actionText, // Ví dụ: "Turning on the pump..."
-        suggestion: command, // QUAN TRỌNG: Dùng để khớp với tín hiệu hoàn thành
-        timestamp: new Date(),
-        zoneId: zoneId,
-        severity: 'info', // Màu xanh cho hành động của người dùng
-        actionState: 'in_progress', // Bắt đầu ngay với trạng thái in_progress
-      };
-      // Thêm vào đầu danh sách
-      return [newActionNotification, ...prev.slice(0, 49)];
+      let foundAndTransformed = false;
+      
+      // *** LOGIC MỚI: TÌM VÀ BIẾN ĐỔI ***
+      // Bước 1: Duyệt qua danh sách, tìm thông báo pending phù hợp để "biến đổi"
+      const transformedList = prev.map(n => {
+        if (
+          !foundAndTransformed &&         // Chỉ biến đổi cái đầu tiên tìm thấy
+          n.zoneId === zoneId &&
+          n.suggestion === command &&
+          n.actionState === 'pending'
+        ) {
+          foundAndTransformed = true;
+          // Biến đổi nó thành một hành động "in_progress"
+          return {
+            ...n, // Giữ lại message, id, etc. của thông báo gốc
+            type: 'Manual Control', // Đổi type để có màu xanh
+            severity: 'info' as 'info',
+            actionState: 'in_progress' as 'in_progress', // Cập nhật trạng thái
+            timestamp: new Date(), // Cập nhật thời gian
+          };
+        }
+        return n;
+      });
+
+      // Bước 2: Nếu không tìm thấy thông báo nào để biến đổi (hành động hoàn toàn mới)
+      // thì hãy tạo một thông báo mới từ đầu.
+      if (!foundAndTransformed) {
+        const newActionNotification: Notification = {
+          id: uuidv4(),
+          type: 'Manual Control',
+          message: actionText,
+          suggestion: command,
+          timestamp: new Date(),
+          zoneId: zoneId,
+          severity: 'info',
+          actionState: 'in_progress',
+        };
+        // Thêm vào đầu danh sách
+        return [newActionNotification, ...prev.slice(0, 49)];
+      }
+
+      // Bước 3: Nếu đã biến đổi thành công, trả về danh sách đã được cập nhật.
+      return transformedList;
     });
   };
 

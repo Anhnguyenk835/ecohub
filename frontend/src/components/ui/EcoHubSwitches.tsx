@@ -109,7 +109,7 @@ function Pill({ children }: { children: React.ReactNode }) {
   return <div className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs bg-neutral-800 text-neutral-100">{children}</div>;
 }
 
-export default function EcoHubSwitches({ zoneId, onCommand }: { zoneId: string, onCommand?: (zoneId: string, command: string, actionText: string) => void;}) {
+export default function EcoHubSwitches({ zoneId, onAction }: { zoneId: string, onAction?: (command: string, actionText: string) => void;}) {
   const [connected, setConnected] = useState(false);
   const [actuatorStates, setActuatorStates] = useState<ActuatorStates>(initialActuatorStates);
   const [pending, setPending] = useState<Record<string, boolean>>({});
@@ -178,7 +178,13 @@ export default function EcoHubSwitches({ zoneId, onCommand }: { zoneId: string, 
     if (!connected || !deviceOnline) {
       console.log("mqtt connection: ", connected);
       console.log("device online: ", deviceOnline);
-      toast("Cannot send command: Not connected to MQTT.", { type: "error" });
+      toast("Cannot send command: Device is offline or not connected.", {
+        description: "Please check the device connection and try again.",
+        action: {
+          label: "Dismiss",
+          onClick: () => {},
+        },
+      });
       return;
     }
 
@@ -189,14 +195,14 @@ export default function EcoHubSwitches({ zoneId, onCommand }: { zoneId: string, 
 
     setPending((p) => ({ ...p, [deviceKey]: true }));
     // GỌI HÀM onCommand (nếu nó được truyền vào) ĐỂ TẠO THÔNG BÁO
-    if (onCommand) {
-      onCommand(zoneId, commandToSend, actionText);
+    if (onAction) {
+      onAction(commandToSend, actionText);
     }
 
     try {
       // Gửi lệnh qua API
       await post(`/zones/${zoneId}/command`, { command: commandToSend });
-      toast(`Command '${commandToSend}' sent.`, { type: "success" });
+      // toast(`Command '${commandToSend}' sent.`, { type: "success" });
     } catch (error) {
       toast("Failed to send command.", { type: "error" });
       setPending((p) => ({ ...p, [deviceKey]: false }));
