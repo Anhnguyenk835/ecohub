@@ -75,7 +75,7 @@ class CommandRequest(BaseModel):
     command: str
 
 @app.post("/zones/{zone_id}/command", status_code=200, tags=["Commands"])
-async def send_command_to_zone_device(zone_id: str, request: CommandRequest, _=Depends(get_verified_user)):
+async def send_command_to_zone_device(zone_id: str, request: CommandRequest, user=Depends(get_verified_user)):
     """
     Nhận một lệnh từ client (ví dụ: web dashboard) và publish nó
     đến topic MQTT để thiết bị IoT thực thi.
@@ -97,7 +97,7 @@ async def send_command_to_zone_device(zone_id: str, request: CommandRequest, _=D
     logger.info(f"Received API request to send command: {request.command} to zone '{zone_id}'")
     
     # Gọi hàm publish từ mqtt_service
-    success = mqtt_service.publish_command(zone_id, request.command)
+    success = mqtt_service.publish_command(zone_id, request.command, user_info=user)
     
     if success:
         return {"status": "success", "message": f"Command '{request.command}' published zone '{zone_id}' successfully."}

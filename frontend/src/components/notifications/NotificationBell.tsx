@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { Bell } from 'lucide-react';
+import { Bell, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns'; // Import hàm mới
 
 // Helper function để lấy màu dựa trên severity
@@ -21,12 +21,15 @@ const getSeverityColor = (severity: 'info' | 'warning' | 'critical') => {
 };
 
 export default function NotificationBell() {
-  const { notifications, clearNotifications } = useNotifications();
+  const { notifications, clearNotifications, handleNotificationAction } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
-  const unreadCount = notifications.length;
-
+  const unreadCount = notifications.filter(n => n.actionState === 'pending').length; // Chỉ đếm thông báo chờ xử lý
+  const pathname = usePathname();
   const handleToggle = () => setIsOpen((prev) => !prev);
+
+  const pathParts = pathname.match(/^\/dashboard\/(.+)/);
+  const currentZoneId = pathParts ? pathParts[1] : null;
 
   const handleNotificationClick = (zoneId: string) => {
     // Đóng dropdown
@@ -101,6 +104,61 @@ export default function NotificationBell() {
                     <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                       {notif.message}
                     </p>
+                    {notif.actionState === 'pending' && notif.suggestion && (
+                      <>
+                        {/* Dòng Suggestion */}
+                        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Suggestion: <span className="font-medium text-gray-700 dark:text-gray-200">{notif.suggestion_text}</span>
+                          </p>
+                        </div>
+                        {/* Container cho các nút */}
+                        <div className="mt-2 flex items-center space-x-2 w-full">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleNotificationAction(notif.id, 'yes'); }}
+                            className="flex-1 px-3 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            Yes
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleNotificationAction(notif.id, 'no'); }}
+                            className="flex-1 px-3 py-2 text-sm font-semibold text-gray-800 bg-gray-200 rounded-lg hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500 transition-colors"
+                          >
+                            No
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    
+                    {notif.actionState === 'activated' && (
+                      <div className="mt-2 flex items-center text-green-600 dark:text-green-400">
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        <span className="text-xs font-semibold">Activated</span>
+                      </div>
+                    )}
+
+                    {notif.actionState === 'dismissed' && (
+                       <div className="mt-2 flex items-center text-gray-500 dark:text-gray-400">
+                        {notif.message.startsWith('Completed:') ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                            <span className="text-xs font-semibold text-green-500">Completed</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-4 h-4 mr-2 text-red-500" />
+                            <span className="text-xs font-semibold text-red-500">Dismissed</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {notif.actionState === 'in_progress' && (
+                      <div className="mt-2 flex items-center text-yellow-600 dark:text-yellow-400">
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        <span className="text-xs font-semibold">In Progress...</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -120,7 +178,7 @@ export default function NotificationBell() {
                 lên thẳng component <Link>.
             */}
             <Link 
-                href="/notifications"
+                href={currentZoneId ? `/notifications?fromZone=${currentZoneId}` : "/notifications"}
                 onClick={() => setIsOpen(false)}
                 className="block w-full text-center py-2 text-blue-600 bg-blue-100 dark:bg-blue-900/50 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900"
             >

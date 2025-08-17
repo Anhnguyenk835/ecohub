@@ -33,10 +33,34 @@ const initialActuatorStates: ActuatorStates = {
 };
 
 const deviceControls = [
-  { name: 'Pump', deviceKey: 'WaterPump', icon: Droplets, commands: { ON: 'PUMP_WATER_ON', OFF: 'PUMP_WATER_OFF' } },
-  { name: 'Fan', deviceKey: 'Fan', icon: Fan, commands: { ON: 'TURN_FAN_ON', OFF: 'TURN_FAN_OFF' } },
-  { name: 'Heater', deviceKey: 'Heater', icon: Power, commands: { ON: 'TURN_HEATER_ON', OFF: 'TURN_HEATER_OFF' } },
-  { name: 'Light', deviceKey: 'Light', icon: Lightbulb, commands: { ON: 'TURN_LIGHT_ON', OFF: 'TURN_LIGHT_OFF' } },
+  { 
+    name: 'Pump', 
+    deviceKey: 'WaterPump', 
+    icon: Droplets, 
+    commands: { ON: 'PUMP_WATER_ON', OFF: 'PUMP_WATER_OFF' }, 
+    text: { ON: 'Turning on Pump...', OFF: 'Turning off Pump...' } 
+  },
+  { 
+    name: 'Fan', 
+    deviceKey: 'Fan', 
+    icon: Fan, 
+    commands: { ON: 'TURN_FAN_ON', OFF: 'TURN_FAN_OFF' }, 
+    text: { ON: 'Turning on Fan...', OFF: 'Turning off Fan...' } 
+  },
+  { 
+    name: 'Heater', 
+    deviceKey: 'Heater', 
+    icon: Power, 
+    commands: { ON: 'TURN_HEATER_ON', OFF: 'TURN_HEATER_OFF' }, 
+    text: { ON: 'Turning on Heater...', OFF: 'Turning off Heater...' } 
+  },
+  { 
+    name: 'Light', 
+    deviceKey: 'Light', 
+    icon: Lightbulb, 
+    commands: { ON: 'TURN_LIGHT_ON', OFF: 'TURN_LIGHT_OFF' }, 
+    text: { ON: 'Turning on Light...', OFF: 'Turning off Light...' } 
+  },
 ] as const;
 
 type DeviceIcon = "pump" | "fan" | "light" | "power";
@@ -85,7 +109,7 @@ function Pill({ children }: { children: React.ReactNode }) {
   return <div className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs bg-neutral-800 text-neutral-100">{children}</div>;
 }
 
-export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
+export default function EcoHubSwitches({ zoneId, onCommand }: { zoneId: string, onCommand?: (zoneId: string, command: string, actionText: string) => void;}) {
   const [connected, setConnected] = useState(false);
   const [actuatorStates, setActuatorStates] = useState<ActuatorStates>(initialActuatorStates);
   const [pending, setPending] = useState<Record<string, boolean>>({});
@@ -148,7 +172,8 @@ export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
   // Hàm gửi lệnh đã được cập nhật
   const sendCommand = async (
     deviceKey: keyof ActuatorStates,
-    commands: { ON: string; OFF: string }
+    commands: { ON: string; OFF: string },
+    text: { ON: string; OFF: string } // Thêm text để truyền vào onCommand
   ) => {
     if (!connected || !deviceOnline) {
       console.log("mqtt connection: ", connected);
@@ -160,8 +185,13 @@ export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
     const currentState = actuatorStates[deviceKey];
     const nextStateOn = currentState !== "ON";
     const commandToSend = nextStateOn ? commands.ON : commands.OFF;
+    const actionText = nextStateOn ? text.ON : text.OFF;
 
     setPending((p) => ({ ...p, [deviceKey]: true }));
+    // GỌI HÀM onCommand (nếu nó được truyền vào) ĐỂ TẠO THÔNG BÁO
+    if (onCommand) {
+      onCommand(zoneId, commandToSend, actionText);
+    }
 
     try {
       // Gửi lệnh qua API
@@ -206,7 +236,7 @@ export default function EcoHubSwitches({ zoneId }: { zoneId: string }) {
                   active={!!isOn}
                   pending={!!pending[d.deviceKey]}
                   disabled={!connected || !actuatorStates}
-                  onClick={() => sendCommand(d.deviceKey, d.commands)}
+                  onClick={() => sendCommand(d.deviceKey, d.commands, d.text)}
                 />
               </div>
             );

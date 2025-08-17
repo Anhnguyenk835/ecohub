@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { getIdToken, observeAuthState, logout as fbLogout, signInWithEmail, signUpWithEmail } from '@/lib/firebase-auth'
 import { post } from '@/lib/api'
+import { auth } from '@/lib/firebase';
 
 type AuthUser = {
   uid: string

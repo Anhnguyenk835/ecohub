@@ -3,18 +3,24 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
 import mqtt, { MqttClient } from 'mqtt';
 import { v4 as uuidv4 } from 'uuid';
+import { auth } from '@/lib/firebase';
 
 /**
  * Định nghĩa cấu trúc dữ liệu cho một đối tượng thông báo.
  */
+export type ActionState = 'pending' | 'activated' | 'dismissed' | 'in_progress';
 export interface Notification {
   id: string;
   type: string;
   message: string;
   suggestion?: string;
+  suggestion_text?: string;
   timestamp: Date;
   zoneId: string;
   severity: 'info' | 'warning' | 'critical';
+  actionState: ActionState;
+  is_completion_signal?: boolean;
+  completed_command?: string;
 }
 
 /**
@@ -22,8 +28,11 @@ export interface Notification {
  */
 interface NotificationContextType {
   notifications: Notification[];
-  addNotification: (notification: Omit<Notification, 'id' | 'timestamp'>) => void;
+  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'actionState'>) => void;
   clearNotifications: () => void;
+
+  handleNotificationAction: (notificationId: string, action: 'yes' | 'no') => void;
+  trackUserAction: (zoneId: string, command: string, actionText: string) => void;
 }
 
 const LOCAL_STORAGE_KEY = 'ecohub_notifications';
@@ -51,6 +60,9 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       return parsedItems.map((notif: any) => ({
         ...notif,
         timestamp: new Date(notif.timestamp),
+         actionState: notif.actionState === 'pending' 
+          ? 'dismissed' 
+          : (notif.actionState || 'dismissed'),
       }));
     } catch (error) {
       console.error("Failed to parse notifications from localStorage", error);
@@ -111,8 +123,11 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
           type: message.type || 'System',
           message: message.message,
           suggestion: message.suggestion,
+          suggestion_text: message.suggestion_text,
           zoneId: zoneId,
           severity: severity,
+          is_completion_signal: message.is_completion_signal, // Lấy cờ từ payload
+          completed_command: message.completed_command,     // Lấy lệnh đã hoàn thành
         });
 
       } catch (e) {
@@ -139,15 +154,154 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
    * Hàm để thêm một thông báo mới vào danh sách.
    * Nó tự động thêm id và timestamp.
    */
-  const addNotification = (notification: Omit<Notification, 'id' | 'timestamp'>) => {
+  const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'actionState'>) => {
+    // Kiểm tra xem có thông báo nào đang 'activated' với cùng suggestion không
+    setNotifications((prev) => {
+      if (notification.is_completion_signal && notification.completed_command) {
+      const completedCommand = notification.completed_command;
+      
+      return prev.map(n => {
+        // Tìm thông báo đang chạy (activated/in_progress) có suggestion khớp với lệnh đã hoàn thành
+        if (
+          n.zoneId === notification.zoneId &&
+          n.suggestion === completedCommand &&
+          (n.actionState === 'in_progress' || n.actionState === 'activated')
+        ) {
+          // Cập nhật trạng thái thành "dismissed" và thay đổi message
+          return { ...n, actionState: 'dismissed', message: `Completed: ${n.message.replace('In progress: ', '')}` };
+        }
+        // Giữ nguyên các thông báo khác
+        return n;
+      });
+    }
+
+    // KỊCH BẢN 2: Đây là một thông báo cảnh báo thông thường
+    
+    // Logic 2a: Xử lý in_progress
+    const existingInProgressIndex = prev.findIndex(
+      (n) =>
+        n.zoneId === notification.zoneId &&
+        n.suggestion && notification.suggestion && n.suggestion === notification.suggestion &&
+        (n.actionState === 'activated' || n.actionState === 'in_progress')
+    );
+
+    if (existingInProgressIndex !== -1) {
+      const updatedNotifications = [...prev];
+      updatedNotifications[existingInProgressIndex] = {
+        ...updatedNotifications[existingInProgressIndex],
+        actionState: 'in_progress',
+        message: `In progress: ${notification.message}`,
+        timestamp: new Date(),
+      };
+      return updatedNotifications;
+    }
+
+    // Logic 2b: Vô hiệu hóa các 'pending' cũ hơn cùng loại
     const newNotification: Notification = {
       ...notification,
       id: uuidv4(),
       timestamp: new Date(),
+      actionState: notification.suggestion ? 'pending' : 'dismissed',
     };
-    // Thêm vào đầu mảng để thông báo mới nhất luôn ở trên cùng
-    setNotifications((prev) => [newNotification, ...prev.slice(0, 49)]);
+
+    const updatedPrev = prev.map(n => {
+      if (
+        n.zoneId === newNotification.zoneId &&
+        n.suggestion && newNotification.suggestion && n.suggestion === newNotification.suggestion &&
+        n.actionState === 'pending'
+      ) {
+        return { ...n, actionState: 'dismissed' };
+      }
+      return n;
+    });
+
+    // Thêm thông báo mới vào đầu
+    return [newNotification, ...updatedPrev.slice(0, 49)];
+  });
   };
+
+  const handleNotificationAction = async (notificationId: string, action: 'yes' | 'no') => {
+    const notification = notifications.find(n => n.id === notificationId);
+    if (!notification) return;
+
+    if (action === 'no') {
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, actionState: 'dismissed' } : n)
+      );
+      return; // Dừng hàm ở đây
+    }
+    
+    if (action === 'yes' && notification.suggestion) {
+      // Cập nhật UI trước
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, actionState: 'activated' } : n)
+      );
+      
+      try {
+        // === CÁCH LẤY TOKEN ĐÚNG ===
+        if (!auth?.currentUser) {
+          console.error("User is not authenticated.");
+          throw new Error("User not authenticated");
+        }
+        const token = await auth.currentUser.getIdToken(true); // true để ép làm mới token nếu cần
+
+        const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+        if (!apiBaseUrl) {
+          throw new Error("API_BASE_URL is not defined");
+        }
+        
+        const apiUrl = `${apiBaseUrl}/zones/${notification.zoneId}/command`;
+        
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` // Gửi token mới nhất
+          },
+          body: JSON.stringify({ command: notification.suggestion })
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          console.error(`Failed to send command. Status: ${response.status}`, errorBody);
+          throw new Error(`API Error: ${response.status}`);
+        }
+
+        console.log("Command sent successfully!");
+
+      } catch (error) {
+        console.error("Error in handleNotificationAction:", error);
+        // Rollback trạng thái về 'pending' nếu có lỗi
+        setNotifications(prev => 
+          prev.map(n => {
+            if (n.id === notificationId) {
+              return { ...n, actionState: 'pending', message: `Failed: ${n.message}` };
+            }
+            return n;
+          })
+        );
+      }
+    }
+  };
+
+
+  const trackUserAction = (zoneId: string, command: string, actionText: string) => {
+    setNotifications((prev) => {
+      const newActionNotification: Notification = {
+        id: uuidv4(),
+        type: 'Manual Control', // Một loại mới để phân biệt
+        message: actionText, // Ví dụ: "Turning on the pump..."
+        suggestion: command, // QUAN TRỌNG: Dùng để khớp với tín hiệu hoàn thành
+        timestamp: new Date(),
+        zoneId: zoneId,
+        severity: 'info', // Màu xanh cho hành động của người dùng
+        actionState: 'in_progress', // Bắt đầu ngay với trạng thái in_progress
+      };
+      // Thêm vào đầu danh sách
+      return [newActionNotification, ...prev.slice(0, 49)];
+    });
+  };
+
 
   /**
    * Hàm để xóa tất cả các thông báo.
@@ -165,7 +319,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
   // Cung cấp state và các hàm cho các component con
   return (
-    <NotificationContext.Provider value={{ notifications, addNotification, clearNotifications }}>
+    <NotificationContext.Provider value={{ notifications, addNotification, clearNotifications, handleNotificationAction, trackUserAction }}>
       {children}
     </NotificationContext.Provider>
   );

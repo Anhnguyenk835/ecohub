@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import paho.mqtt.client as mqtt
 from app.config import settings
@@ -9,6 +9,7 @@ from app.readings_history.reading_history_service import ReadingHistoryService
 from app.sensor.sensor_service import SensorService
 from app.services.database import db 
 from app.zone.zone_service import ZoneService
+from app.action_log.action_log_service import ActionLogService
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,7 @@ zone_status_service = ZoneStatusService()
 reading_history_service = ReadingHistoryService()
 sensor_service = SensorService()
 zone_service = ZoneService()
+action_log_service = ActionLogService()
 
 async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) -> str:
     overall_status = "Good" 
@@ -41,51 +43,60 @@ async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) ->
 
             if sensor_type == "temperature":
                 if current_value < min_val:
-                    msg = f"Zone '{zone_name}': temperature is too low ({current_value}°C)"
+                    msg = f"Zone '{zone_name}': temperature is too low ({current_value}°C). Turning on heater is recommended."
                     overall_status = "Too Cool" 
                     suggestion = "TURN_HEATER_ON"
-                    
+                    suggestion_text = "Activate Heater?"
+
                     issue_status.append({
                         "status": overall_status,
                         "message": msg,
                         "suggestion": suggestion,
+                        "suggestion_text": suggestion_text,
                         "priority": 2
                      })
                 elif current_value > max_val:
-                    msg = f"Zone '{zone_name}': temperature is too high ({current_value})"
+                    msg = f"Zone '{zone_name}': temperature is too high ({current_value}°C). Turning on fan is recommended."
                     overall_status = "Too Hot"
                     suggestion = "TURN_FAN_ON"
-                    
+                    suggestion_text = "Activate Fan?"
+
                     issue_status.append({
                         "status": overall_status,
                         "message": msg,
                         "suggestion": suggestion,
+                        "suggestion_text": suggestion_text,
                         "priority": 2
                      })
                 
             if sensor_type == "soilMoisture":
                 if current_value < min_val:
-                    msg = f"Zone '{zone_name}': soil is too dry ({current_value}%). Watering is recommended."
+                    msg = f"Zone '{zone_name}': soil is too dry ({current_value}%). Turning on pump is recommended."
                     overall_status = "Need water"
                     suggestion = "PUMP_WATER_ON"
-                    
+                    suggestion_text = "Activate Pump?"
+
                     issue_status.append({
                         "status": overall_status,
                         "message": msg,
                         "suggestion": suggestion,
+                        "suggestion_text": suggestion_text,
                         "priority": 1
                      })
 
             if sensor_type == "lightIntensity":
                 if current_value < min_val:
-                    msg = f"Zone '{zone_name}': Light intensity is too low ({current_value} lux)."
+                    msg = f"Zone '{zone_name}': Light intensity is too low ({current_value} lux). Turning on light is recommended."
                     overall_status = "Need light"
                     suggestion = "TURN_LIGHT_ON"
+                    
+                    suggestion_text = "Activate Light?"
 
                     issue_status.append({
                         "status": overall_status,
                         "message": msg,
                         "suggestion": suggestion,
+                        "suggestion_text": suggestion_text,
                         "priority": 0
                      })
 
@@ -107,10 +118,16 @@ async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) ->
     if not issue_status:
         return "Good", None
 
-    for issue in issue_status:
-        publish_notification(zone_id, issue["status"], issue["message"], issue["suggestion"])
-
     issue_status.sort(key=lambda x: x["priority"], reverse=True)
+
+    for issue in issue_status:
+        publish_notification(
+            zone_id, 
+            issue["status"], 
+            issue["message"], 
+            issue["suggestion"],
+            issue["suggestion_text"] # Truyền tham số mới
+        )
 
     most_critical_issue = issue_status[0]
     overall_status = most_critical_issue["status"]
@@ -120,7 +137,7 @@ async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) ->
     
     return overall_status, suggestion
 
-def publish_notification(zone_id: str, alert_type: str, message: str, suggestion: str):
+def publish_notification(zone_id: str, alert_type: str, message: str, suggestion: str, suggestion_text: str):
     """Gửi một thông báo/cảnh báo lên topic notifications của một zone cụ thể."""
     try:
         # Xây dựng topic notification động
@@ -128,7 +145,8 @@ def publish_notification(zone_id: str, alert_type: str, message: str, suggestion
         payload = {
             "type": alert_type,
             "message": message,
-            "suggestion": suggestion
+            "suggestion": suggestion,
+            "suggestion_text": suggestion_text
         }
         json_payload = json.dumps(payload)
         
@@ -139,6 +157,26 @@ def publish_notification(zone_id: str, alert_type: str, message: str, suggestion
             logger.error(f"Failed to send notification to '{notification_topic}'. RC: {result.rc}")
     except Exception as e:
         logger.error(f"Exception while publishing notification: {e}")
+
+def publish_completion_notification(zone_id: str, completed_command: str):
+    """Gửi một thông báo đặc biệt để báo hiệu một hành động đã hoàn thành."""
+    try:
+        notification_topic = f"ecohub/{zone_id}/notifications"
+        payload = {
+            "type": "Action Completed",
+            "message": f"Action '{completed_command}' has finished.",
+            "is_completion_signal": True,        # Cờ đặc biệt
+            "completed_command": completed_command # Lệnh nào đã hoàn thành
+        }
+        json_payload = json.dumps(payload)
+        
+        result = mqtt_client.publish(notification_topic, json_payload, qos=1)
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            logger.info(f"COMPLETION SIGNAL SENT to '{notification_topic}' for command '{completed_command}'")
+        else:
+            logger.error(f"Failed to send completion signal. RC: {result.rc}")
+    except Exception as e:
+        logger.error(f"Exception while publishing completion signal: {e}")
 
 def publish_status_update(zone_id: str, status_payload: dict):
     """Gửi tin nhắn cập nhật trạng thái của một zone."""
@@ -249,10 +287,16 @@ def on_connect(client, userdata, flags, rc):
         wildcard_topic = settings.mqtt_topic_pattern
         client.subscribe(wildcard_topic)
 
+        logger.info(f"Subscribed to topic: {wildcard_topic}")
+
         notification_topic = settings.mqtt_notification_topic
         client.subscribe(notification_topic, qos=1)
 
-        logger.info(f"Subscribed to topic: {wildcard_topic}")
+        logger.info(f"Subscribed to topic: {notification_topic}")
+
+        feedback_topic = "ecohub/+/command_feedback"
+        client.subscribe(feedback_topic, qos=1)
+        logger.info(f"Subscribed to topic: {feedback_topic}")
     else:
         logger.error(f"Failed to connect to MQTT Broker, return code {rc}\n")
 
@@ -269,8 +313,18 @@ def on_message(client, userdata, msg):
             logger.debug("Successfully parsed JSON data.")
 
             asyncio.run(process_sensor_data(zone_id, data))
+        elif len(topic_parts) == 3 and topic_parts[0] == "ecohub" and topic_parts[2] == "command_feedback":
+            zone_id = topic_parts[1]
+            payload_str = msg.payload.decode('utf-8')
+            logger.info(f"Received COMMAND FEEDBACK from zone '{zone_id}': {payload_str}")
+            
+            if payload_str.startswith("COMPLETED:"):
+                completed_command = payload_str.split(":", 1)[1]
+                # Gọi hàm để gửi tín hiệu hoàn thành lên cho frontend
+                publish_completion_notification(zone_id, completed_command)
         else:
             logger.warning(f"Received message on an unhandled topic format: {msg.topic}")
+
     except json.JSONDecodeError:
         logger.error(f"Failed to decode JSON from payload: {msg.payload.decode()}")
     except Exception as e:
@@ -279,14 +333,26 @@ def on_message(client, userdata, msg):
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
 
-def publish_command(zone_id: str, command: str):
+def publish_command(zone_id: str, command: str, user_info: dict = None):
     """Gửi một lệnh điều khiển tới topic command của một zone cụ thể."""
     try:
         command_topic = f"ecohub/{zone_id}/commands"
         result = mqtt_client.publish(command_topic, command)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             logger.info(f"Successfully published command '{command}' to topic '{command_topic}'")
-            # TODO: Log hành động này vào collection action_logs
+            if user_info and user_info.get("uid"):
+                log_data = {
+                    "userId": user_info["uid"],
+                    "userName": user_info.get("name", "N/A"),
+                    "zoneId": zone_id,
+                    "action": "SEND_COMMAND",
+                    "details": f"User sent command '{command}' from notification.",
+                    "status": "SUCCESS"
+                }
+                # Chạy bất đồng bộ để không block response
+                asyncio.create_task(action_log_service.create_action_log(log_data))
+                logger.info(f"Action log created for user {user_info['uid']} sending command {command}")
+
             return True
         else:
             logger.error(f"Failed to publish command '{command}'. Return code: {result.rc}")
