@@ -40,13 +40,14 @@ export interface ScheduleDevice {
 
 export interface Schedule {
   id: string;
+  zoneid: string; // ID of the zone
   name: string;
   deviceId: string;
   deviceType: 'pump' | 'fan' | 'heater' | 'light';
   action: 'activate' | 'deactivate';
   time: string; // HH:MM format
-  date?: string; // YYYY-MM-DD format, used for once schedules
   repetition: RepetitionType;
+  date?: string; // YYYY-MM-DD format, used for once schedules
   daysOfWeek?: number[]; // 0-6 for Sunday-Saturday, used for weekly
   dayOfMonth?: number; // 1-31, used for monthly
   isActive: boolean;

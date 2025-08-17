@@ -12,8 +12,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Schedule, ScheduleDevice, RepetitionType } from '@/types';
 import { getSchedules, createSchedule, updateSchedule, deleteSchedule, toggleScheduleStatus } from '@/lib/api';
 import { useParams } from 'next/navigation';
-import { Clock, Calendar, Settings, Trash2, Edit, Plus, Power, PowerOff } from 'lucide-react';
+import { Clock, Calendar, Settings, Trash2, Edit, Plus, Power, PowerOff, AlertCircle } from 'lucide-react';
 import { format } from "date-fns";
+
+interface ScheduleFormData {
+  zoneid: string; // ID of the zone
+  name: string;
+  deviceId: string;
+  deviceType: 'pump' | 'fan' | 'heater' | 'light';
+  action: 'activate' | 'deactivate';
+  time: string;
+  date: string | undefined;
+  repetition: RepetitionType;
+  daysOfWeek: number[] | undefined;
+  dayOfMonth: number | undefined;
+  isActive: boolean;
+}
 
 export default function SchedulePage() {
   const params = useParams();
@@ -23,6 +37,8 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   
   // Mock devices - replace with actual API call
   const devices: ScheduleDevice[] = [
@@ -32,15 +48,16 @@ export default function SchedulePage() {
     { id: 'light-1', name: 'Grow Light', type: 'light', status: 'off' },
   ];
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ScheduleFormData>({
+    zoneid: zoneId, // Initialize with zoneId
     name: '',
     deviceId: '',
-    deviceType: 'pump' as 'pump' | 'fan' | 'heater' | 'light',
-    action: 'activate' as 'activate' | 'deactivate',
+    deviceType: 'pump',
+    action: 'activate',
     time: '06:00',
     date: new Date().toISOString().split('T')[0], // Today's date as default
-    repetition: 'daily' as RepetitionType,
-    daysOfWeek: [] as number[],
+    repetition: 'daily',
+    daysOfWeek: [],
     dayOfMonth: 1,
     isActive: true,
   });
@@ -52,10 +69,12 @@ export default function SchedulePage() {
   const loadSchedules = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await getSchedules(zoneId);
       setSchedules(data);
     } catch (error) {
       console.error('Failed to load schedules:', error);
+      setError('Failed to load schedules. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -63,24 +82,60 @@ export default function SchedulePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate form data
+    if (!formData.name.trim()) {
+      setError('Schedule name is required');
+      return;
+    }
+    
+    if (!formData.deviceId) {
+      setError('Please select a device');
+      return;
+    }
+    
+    // Validate repetition-specific fields
+    if (formData.repetition === 'weekly' && (!formData.daysOfWeek || formData.daysOfWeek.length === 0)) {
+      setError('Please select at least one day of the week for weekly schedules');
+      return;
+    }
+    
+    if (formData.repetition === 'monthly' && !formData.dayOfMonth) {
+      setError('Please select a day of the month for monthly schedules');
+      return;
+    }
+    
+    if (formData.repetition === 'once' && !formData.date) {
+      setError('Please select a date for one-time schedules');
+      return;
+    }
+    
     try {
+      setSubmitting(true);
+      setError(null);
+      
       if (editingSchedule) {
         await updateSchedule(zoneId, editingSchedule.id, formData);
         setEditingSchedule(null);
       } else {
         await createSchedule(zoneId, formData);
       }
+      
       await loadSchedules();
       resetForm();
       setShowCreateForm(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save schedule:', error);
+      setError(error.message || 'Failed to save schedule. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleEdit = (schedule: Schedule) => {
     setEditingSchedule(schedule);
     setFormData({
+      zoneid: schedule.zoneid, // Keep zoneid
       name: schedule.name,
       deviceId: schedule.deviceId,
       deviceType: schedule.deviceType,
@@ -93,41 +148,48 @@ export default function SchedulePage() {
       isActive: schedule.isActive,
     });
     setShowCreateForm(true);
+    setError(null);
   };
 
   const handleDelete = async (scheduleId: string) => {
     if (confirm('Are you sure you want to delete this schedule?')) {
       try {
+        setError(null);
         await deleteSchedule(zoneId, scheduleId);
         await loadSchedules();
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to delete schedule:', error);
+        setError(error.message || 'Failed to delete schedule. Please try again.');
       }
     }
   };
 
   const handleToggleStatus = async (schedule: Schedule) => {
     try {
+      setError(null);
       await toggleScheduleStatus(zoneId, schedule.id, !schedule.isActive);
       await loadSchedules();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to toggle schedule status:', error);
+      setError(error.message || 'Failed to toggle schedule status. Please try again.');
     }
   };
 
   const resetForm = () => {
     setFormData({
+      zoneid: zoneId, // Keep zoneId
       name: '',
       deviceId: '',
       deviceType: 'pump',
       action: 'activate',
       time: '06:00',
-      date: new Date().toISOString().split('T')[0],
+      date: undefined,
       repetition: 'daily',
-      daysOfWeek: [],
-      dayOfMonth: 1,
+      daysOfWeek: undefined,
+      dayOfMonth: undefined,
       isActive: true,
     });
+    setError(null);
   };
 
   const getDeviceIcon = (type: string) => {
@@ -216,6 +278,22 @@ export default function SchedulePage() {
             Create Schedule
           </Button>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-red-500" />
+            <span className="text-red-700">{error}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setError(null)}
+              className="ml-auto text-red-500 hover:text-red-700"
+            >
+              ×
+            </Button>
+          </div>
+        )}
 
         {/* Create/Edit Form */}
         {showCreateForm && (
@@ -320,17 +398,17 @@ export default function SchedulePage() {
                         <label key={day} className="flex items-center gap-1">
                           <input
                             type="checkbox"
-                            checked={formData.daysOfWeek.includes(index)}
+                            checked={formData.daysOfWeek?.includes(index) || false}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setFormData({
                                   ...formData,
-                                  daysOfWeek: [...formData.daysOfWeek, index]
+                                  daysOfWeek: [...(formData.daysOfWeek || []), index]
                                 });
                               } else {
                                 setFormData({
                                   ...formData,
-                                  daysOfWeek: formData.daysOfWeek.filter(d => d !== index)
+                                  daysOfWeek: (formData.daysOfWeek || []).filter(d => d !== index)
                                 });
                               }
                             }}
@@ -391,8 +469,12 @@ export default function SchedulePage() {
                 )}
 
                 <div className="flex gap-2 pt-4">
-                  <Button type="submit" className="flex-1 cursor-pointer">
-                    {editingSchedule ? 'Update Schedule' : 'Create Schedule'}
+                  <Button 
+                    type="submit" 
+                    className="flex-1 cursor-pointer"
+                    disabled={submitting}
+                  >
+                    {submitting ? 'Saving...' : (editingSchedule ? 'Update Schedule' : 'Create Schedule')}
                   </Button>
                   <Button
                     type="button"
@@ -403,6 +485,7 @@ export default function SchedulePage() {
                       setEditingSchedule(null);
                       resetForm();
                     }}
+                    disabled={submitting}
                   >
                     Cancel
                   </Button>
@@ -465,7 +548,6 @@ export default function SchedulePage() {
                               schedule.isActive ? 'text-gray-500' : 'text-gray-400'
                             }`}>
                               <span className="flex items-center gap-1 cursor-pointer group">
-                                {/* <Clock className="w-3 h-3 transition-transform hover:scale-125 cursor-pointer" /> */}
                                 <span className={`transition-colors ${
                                   schedule.isActive ? 'group-hover:text-blue-600' : ''
                                 }`}>{schedule.time}</span>

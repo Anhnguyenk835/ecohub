@@ -31,6 +31,28 @@ export async function post<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T
 }
 
+export async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: await authHeaders(),
+    body: JSON.stringify(body),
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`)
+  return (await res.json()) as T
+}
+
+export async function patch<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(`PATCH ${path} failed: ${res.status}`)
+  return (await res.json()) as T
+}
+
 export async function del(path: string): Promise<void> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'DELETE',
@@ -46,150 +68,66 @@ export async function del(path: string): Promise<void> {
   return;
 }
 
-// Schedule API functions (placeholder implementations)
+// Schedule API functions 
 export async function getSchedules(zoneId: string): Promise<Schedule[]> {
-  // Placeholder API call - replace with actual implementation
-  console.log(`Fetching schedules for zone: ${zoneId}`);
-  
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Return mock data
-  return [
-    {
-      id: '1',
-      name: 'Morning Watering',
-      deviceId: 'pump-1',
-      deviceType: 'pump',
-      action: 'activate',
-      time: '06:00',
-      repetition: 'daily',
-      isActive: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01')
-    },
-    {
-      id: '2',
-      name: 'Evening Light',
-      deviceId: 'light-1',
-      deviceType: 'light',
-      action: 'activate',
-      time: '18:00',
-      repetition: 'daily',
-      isActive: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01')
-    },
-    {
-      id: '3',
-      name: 'Special Event',
-      deviceId: 'heater-1',
-      deviceType: 'heater',
-      action: 'activate',
-      time: '10:00',
-      date: '2024-12-25',
-      repetition: 'once',
-      isActive: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01')
-    },
-    {
-      id: '4',
-      name: 'Special Event',
-      deviceId: 'heater-1',
-      deviceType: 'heater',
-      action: 'activate',
-      time: '10:00',
-      date: '2024-12-25',
-      repetition: 'once',
-      isActive: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01')
-    },
-    {
-      id: '5',
-      name: 'Special Event',
-      deviceId: 'heater-1',
-      deviceType: 'heater',
-      action: 'activate',
-      time: '10:00',
-      date: '2024-12-25',
-      repetition: 'once',
-      isActive: true,
-      createdAt: new Date('2024-01-01'),
-      updatedAt: new Date('2024-01-01')
-    }
-  ];
+  try {
+    const schedules = await get<Schedule[]>(`/schedules/?zone_id=${zoneId}`);
+    return schedules;
+  } catch (error) {
+    console.error('Failed to fetch schedules:', error);
+    throw error;
+  }
 }
 
 export async function createSchedule(zoneId: string, schedule: Omit<Schedule, 'id' | 'createdAt' | 'updatedAt'>): Promise<Schedule> {
-  // Placeholder API call - replace with actual implementation
-  console.log(`Creating schedule for zone: ${zoneId}`, schedule);
-  
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Return mock created schedule
-  return {
-    ...schedule,
-    id: Math.random().toString(36).substr(2, 9),
-    createdAt: new Date(),
-    updatedAt: new Date()
-  };
+  try {
+    // Add zoneId to the schedule data as required by backend
+    const scheduleData = {
+      ...schedule,
+      zoneid: zoneId // Backend expects 'zoneid' field
+    };
+    
+    const createdSchedule = await post<Schedule>('/schedules/', scheduleData);
+    return createdSchedule;
+  } catch (error) {
+    console.error('Failed to create schedule:', error);
+    throw error;
+  }
 }
 
 export async function updateSchedule(zoneId: string, scheduleId: string, updates: Partial<Schedule>): Promise<Schedule> {
-  // Placeholder API call - replace with actual implementation
-  console.log(`Updating schedule ${scheduleId} for zone: ${zoneId}`, updates);
-  
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Return mock updated schedule
-  return {
-    id: scheduleId,
-    name: 'Updated Schedule',
-    deviceId: 'pump-1',
-    deviceType: 'pump',
-    action: 'activate',
-    time: '07:00',
-    repetition: 'daily',
-    isActive: true,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date()
-  };
+  try {
+    // Add zoneId to updates if not present
+    const updateData = {
+      ...updates,
+      zoneid: zoneId
+    };
+    
+    const updatedSchedule = await put<Schedule>(`/schedules/${scheduleId}`, updateData);
+    return updatedSchedule;
+  } catch (error) {
+    console.error('Failed to update schedule:', error);
+    throw error;
+  }
 }
 
 export async function deleteSchedule(zoneId: string, scheduleId: string): Promise<void> {
-  // Placeholder API call - replace with actual implementation
-  console.log(`Deleting schedule ${scheduleId} for zone: ${zoneId}`);
-  
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Mock successful deletion
-  return;
+  try {
+    await del(`/schedules/${scheduleId}`);
+  } catch (error) {
+    console.error('Failed to delete schedule:', error);
+    throw error;
+  }
 }
 
 export async function toggleScheduleStatus(zoneId: string, scheduleId: string, isActive: boolean): Promise<Schedule> {
-  // Placeholder API call - replace with actual implementation
-  console.log(`Toggling schedule ${scheduleId} status to ${isActive} for zone: ${zoneId}`);
-  
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // Return mock updated schedule
-  return {
-    id: scheduleId,
-    name: 'Sample Schedule',
-    deviceId: 'pump-1',
-    deviceType: 'pump',
-    action: 'activate',
-    time: '06:00',
-    repetition: 'daily',
-    isActive,
-    createdAt: new Date('2024-01-01'),
-    updatedAt: new Date()
-  };
+  try {
+    // Use the toggle endpoint which automatically toggles the status
+    const updatedSchedule = await patch<Schedule>(`/schedules/${scheduleId}/toggle`);
+    return updatedSchedule;
+  } catch (error) {
+    console.error('Failed to toggle schedule status:', error);
+    throw error;
+  }
 }
 
