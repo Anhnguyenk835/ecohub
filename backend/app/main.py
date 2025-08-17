@@ -21,6 +21,7 @@ from app.command.command_route import router as command_router
 from app.alter.alter_route import router as alter_router
 from app.actuator.actuator_route import router as actuator_router
 from app.action_log.action_log_route import router as action_log_router
+from app.scheduler.scheduler_route import router as scheduler_router
 
 from app.services import mqtt_service
 from app.services.firebase_auth import get_verified_user
@@ -119,6 +120,7 @@ app.include_router(command_router)
 app.include_router(alter_router)
 app.include_router(actuator_router)
 app.include_router(action_log_router)
+app.include_router(scheduler_router)
 
 @app.middleware("http")
 async def log_requests(request, call_next):
