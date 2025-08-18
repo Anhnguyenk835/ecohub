@@ -45,10 +45,12 @@ export interface Schedule {
   deviceId: string;
   deviceType: 'pump' | 'fan' | 'heater' | 'light';
   action: 'activate' | 'deactivate';
-  time: string; // HH:MM format
+  command: string; // Specific command to send to the device
+  hour: number; // Hour in 24-hour format (0-23)
+  minute: number; // Minute (0-59)
   repetition: RepetitionType;
   date?: string; // YYYY-MM-DD format, used for once schedules
-  daysOfWeek?: number[]; // 0-6 for Sunday-Saturday, used for weekly
+  daysOfWeek?: number[]; // 1-7 for Monday-Sunday, used for weekly
   dayOfMonth?: number; // 1-31, used for monthly
   isActive: boolean;
   createdAt: Date;

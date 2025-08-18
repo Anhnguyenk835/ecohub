@@ -10,24 +10,25 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { TimePickerInput } from "@/components/ui/time-picker-input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Schedule, ScheduleDevice, RepetitionType } from '@/types';
-import { getSchedules, createSchedule, updateSchedule, deleteSchedule, toggleScheduleStatus } from '@/lib/api';
-import { useParams } from 'next/navigation';
-import { Clock, Calendar, Settings, Trash2, Edit, Plus, Power, PowerOff, AlertCircle } from 'lucide-react';
-import { format } from "date-fns";
 
 interface ScheduleFormData {
-  zoneid: string; // ID of the zone
   name: string;
   deviceId: string;
   deviceType: 'pump' | 'fan' | 'heater' | 'light';
   action: 'activate' | 'deactivate';
-  time: string;
+  command: string; // Add command field
+  time: string; // Keep time string for UI
   date: string | undefined;
   repetition: RepetitionType;
   daysOfWeek: number[] | undefined;
   dayOfMonth: number | undefined;
   isActive: boolean;
 }
+import { getSchedules, createSchedule, updateSchedule, deleteSchedule, toggleScheduleStatus } from '@/lib/api';
+import { useParams } from 'next/navigation';
+import { Calendar, Settings, Trash2, Edit, Plus, Power, PowerOff, Droplets, Wind, Flame, Lightbulb, Zap } from 'lucide-react';
+import { format } from "date-fns";
+import { getDeviceCommand } from '@/components/ui/EcoHubSwitches';
 
 export default function SchedulePage() {
   const params = useParams();
@@ -37,8 +38,12 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  
+  // Confirmation popup states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showToggleConfirm, setShowToggleConfirm] = useState(false);
+  const [scheduleToAction, setScheduleToAction] = useState<Schedule | null>(null);
+
   
   // Mock devices - replace with actual API call
   const devices: ScheduleDevice[] = [
@@ -48,17 +53,19 @@ export default function SchedulePage() {
     { id: 'light-1', name: 'Grow Light', type: 'light', status: 'off' },
   ];
 
+
+
   const [formData, setFormData] = useState<ScheduleFormData>({
-    zoneid: zoneId, // Initialize with zoneId
     name: '',
     deviceId: '',
     deviceType: 'pump',
     action: 'activate',
+    command: getDeviceCommand('pump', 'activate'), // Generate proper command
     time: '06:00',
-    date: new Date().toISOString().split('T')[0], // Today's date as default
+    date: undefined,
     repetition: 'daily',
-    daysOfWeek: [],
-    dayOfMonth: 1,
+    daysOfWeek: undefined,
+    dayOfMonth: undefined,
     isActive: true,
   });
 
@@ -66,15 +73,27 @@ export default function SchedulePage() {
     loadSchedules();
   }, [zoneId]);
 
+  // Ensure command is always in sync with device type and action
+  useEffect(() => {
+    if (formData.deviceType && formData.action) {
+      const expectedCommand = getDeviceCommand(formData.deviceType, formData.action);
+      if (formData.command !== expectedCommand) {
+        console.log(`Updating command from "${formData.command}" to "${expectedCommand}" for ${formData.deviceType} ${formData.action}`);
+        setFormData(prev => ({
+          ...prev,
+          command: expectedCommand
+        }));
+      }
+    }
+  }, [formData.deviceType, formData.action]);
+
   const loadSchedules = async () => {
     try {
       setLoading(true);
-      setError(null);
       const data = await getSchedules(zoneId);
       setSchedules(data);
     } catch (error) {
       console.error('Failed to load schedules:', error);
-      setError('Failed to load schedules. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -83,105 +102,201 @@ export default function SchedulePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    console.log('Form Data:', formData);
+    
     // Validate form data
     if (!formData.name.trim()) {
-      setError('Schedule name is required');
+      alert('Schedule name is required');
       return;
     }
     
     if (!formData.deviceId) {
-      setError('Please select a device');
+      alert('Please select a device');
+      return;
+    }
+
+    if (!formData.command) {
+      alert('Please select an action for the device');
       return;
     }
     
     // Validate repetition-specific fields
     if (formData.repetition === 'weekly' && (!formData.daysOfWeek || formData.daysOfWeek.length === 0)) {
-      setError('Please select at least one day of the week for weekly schedules');
+      alert('Please select at least one day of the week for weekly schedules');
       return;
     }
     
     if (formData.repetition === 'monthly' && !formData.dayOfMonth) {
-      setError('Please select a day of the month for monthly schedules');
+      alert('Please select a day of the month for monthly schedules');
       return;
     }
     
     if (formData.repetition === 'once' && !formData.date) {
-      setError('Please select a date for one-time schedules');
+      alert('Please select a date for one-time schedules');
       return;
     }
     
     try {
-      setSubmitting(true);
-      setError(null);
+      // Convert time string to hour and minute
+      const [hourStr, minuteStr] = formData.time.split(':');
+      const hour = parseInt(hourStr, 10);
+      const minute = parseInt(minuteStr, 10);
       
-      if (editingSchedule) {
-        await updateSchedule(zoneId, editingSchedule.id, formData);
-        setEditingSchedule(null);
-      } else {
-        await createSchedule(zoneId, formData);
+      // Clean up repetition fields based on the selected repetition type
+      let cleanedScheduleData: any = {
+        zoneid: zoneId,
+        name: formData.name,
+        deviceId: formData.deviceId,
+        deviceType: formData.deviceType,
+        action: formData.action,
+        command: formData.command, // Ensure command is always included
+        hour: hour,
+        minute: minute,
+        repetition: formData.repetition,
+        isActive: formData.isActive,
+      };
+      
+      // Double-check that command is set
+      if (!cleanedScheduleData.command) {
+        console.warn('Command is missing, generating it now');
+        cleanedScheduleData.command = getDeviceCommand(formData.deviceType, formData.action);
+      }
+
+      // Only include relevant fields based on repetition type
+      switch (formData.repetition) {
+        case 'once':
+          cleanedScheduleData.date = formData.date;
+          cleanedScheduleData.daysOfWeek = null;
+          cleanedScheduleData.dayOfMonth = null;
+          console.log(`Once schedule: keeping date=${formData.date}, setting daysOfWeek=null, dayOfMonth=null`);
+          break;
+        case 'daily':
+          cleanedScheduleData.date = null;
+          cleanedScheduleData.daysOfWeek = null;
+          cleanedScheduleData.dayOfMonth = null;
+          console.log(`Daily schedule: setting date=null, daysOfWeek=null, dayOfMonth=null`);
+          break;
+        case 'weekly':
+          cleanedScheduleData.date = null;
+          cleanedScheduleData.daysOfWeek = formData.daysOfWeek && formData.daysOfWeek.length > 0 ? formData.daysOfWeek : null;
+          cleanedScheduleData.dayOfMonth = null;
+          console.log(`Weekly schedule: setting date=null, keeping daysOfWeek=${cleanedScheduleData.daysOfWeek}, setting dayOfMonth=null`);
+          break;
+        case 'monthly':
+          cleanedScheduleData.date = null;
+          cleanedScheduleData.daysOfWeek = null;
+          cleanedScheduleData.dayOfMonth = formData.dayOfMonth || null;
+          console.log(`Monthly schedule: setting date=null, setting daysOfWeek=null, keeping dayOfMonth=${cleanedScheduleData.dayOfMonth}`);
+          break;
+        default:
+          // Fallback: set all to null
+          cleanedScheduleData.date = null;
+          cleanedScheduleData.daysOfWeek = null;
+          cleanedScheduleData.dayOfMonth = null;
+          console.log(`Unknown repetition type: setting all fields to null`);
       }
       
+      console.log('Original formData command:', formData.command);
+      console.log('Cleaned schedule data:', cleanedScheduleData);
+      
+      // Validate that the cleaned data is correct
+      console.log('Validation: repetition type =', cleanedScheduleData.repetition);
+      console.log('Validation: command field =', cleanedScheduleData.command);
+      console.log('Validation: date field =', cleanedScheduleData.date);
+      console.log('Validation: daysOfWeek field =', cleanedScheduleData.daysOfWeek);
+      console.log('Validation: dayOfMonth field =', cleanedScheduleData.dayOfMonth);
+      
+      if (editingSchedule) {
+        console.log(`Updating schedule ${editingSchedule.id} with data:`, cleanedScheduleData);
+        await updateSchedule(zoneId, editingSchedule.id, cleanedScheduleData);
+        setEditingSchedule(null);
+      } else {
+        console.log('Creating new schedule with data:', cleanedScheduleData);
+        await createSchedule(zoneId, cleanedScheduleData);
+      }
       await loadSchedules();
       resetForm();
       setShowCreateForm(false);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save schedule:', error);
-      setError(error.message || 'Failed to save schedule. Please try again.');
-    } finally {
-      setSubmitting(false);
     }
   };
 
   const handleEdit = (schedule: Schedule) => {
     setEditingSchedule(schedule);
-    setFormData({
-      zoneid: schedule.zoneid, // Keep zoneid
+    
+    // Generate the command based on device type and action
+    const command = getDeviceCommand(schedule.deviceType, schedule.action);
+    console.log(`Editing schedule: ${schedule.name}, device: ${schedule.deviceType}, action: ${schedule.action}, generated command: ${command}`);
+    
+    const newFormData = {
       name: schedule.name,
       deviceId: schedule.deviceId,
       deviceType: schedule.deviceType,
       action: schedule.action,
-      time: schedule.time,
-      date: schedule.date || new Date().toISOString().split('T')[0],
+      command: command, // Use generated command
+      time: `${schedule.hour.toString().padStart(2, '0')}:${schedule.minute.toString().padStart(2, '0')}`,
+      date: schedule.date || undefined,
       repetition: schedule.repetition,
-      daysOfWeek: schedule.daysOfWeek || [],
-      dayOfMonth: schedule.dayOfMonth || 1,
+      daysOfWeek: schedule.daysOfWeek || undefined,
+      dayOfMonth: schedule.dayOfMonth || undefined,
       isActive: schedule.isActive,
-    });
+    };
+    
+    console.log('Setting form data with command:', newFormData.command);
+    setFormData(newFormData);
     setShowCreateForm(true);
-    setError(null);
   };
 
-  const handleDelete = async (scheduleId: string) => {
-    if (confirm('Are you sure you want to delete this schedule?')) {
-      try {
-        setError(null);
-        await deleteSchedule(zoneId, scheduleId);
-        await loadSchedules();
-      } catch (error: any) {
-        console.error('Failed to delete schedule:', error);
-        setError(error.message || 'Failed to delete schedule. Please try again.');
-      }
-    }
+  const handleDelete = (schedule: Schedule) => {
+    setScheduleToAction(schedule);
+    setShowDeleteConfirm(true);
   };
 
-  const handleToggleStatus = async (schedule: Schedule) => {
+  const handleToggleStatus = (schedule: Schedule) => {
+    setScheduleToAction(schedule);
+    setShowToggleConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!scheduleToAction) return;
+    
     try {
-      setError(null);
-      await toggleScheduleStatus(zoneId, schedule.id, !schedule.isActive);
+      await deleteSchedule(zoneId, scheduleToAction.id);
       await loadSchedules();
-    } catch (error: any) {
-      console.error('Failed to toggle schedule status:', error);
-      setError(error.message || 'Failed to toggle schedule status. Please try again.');
+      setShowDeleteConfirm(false);
+      setScheduleToAction(null);
+    } catch (error) {
+      console.error('Failed to delete schedule:', error);
     }
+  };
+
+  const confirmToggle = async () => {
+    if (!scheduleToAction) return;
+    
+    try {
+      await toggleScheduleStatus(zoneId, scheduleToAction.id, !scheduleToAction.isActive);
+      await loadSchedules();
+      setShowToggleConfirm(false);
+      setScheduleToAction(null);
+    } catch (error) {
+      console.error('Failed to toggle schedule status:', error);
+    }
+  };
+
+  const cancelAction = () => {
+    setShowDeleteConfirm(false);
+    setShowToggleConfirm(false);
+    setScheduleToAction(null);
   };
 
   const resetForm = () => {
     setFormData({
-      zoneid: zoneId, // Keep zoneId
       name: '',
       deviceId: '',
       deviceType: 'pump',
       action: 'activate',
+      command: getDeviceCommand('pump', 'activate'), // Generate proper command
       time: '06:00',
       date: undefined,
       repetition: 'daily',
@@ -189,16 +304,15 @@ export default function SchedulePage() {
       dayOfMonth: undefined,
       isActive: true,
     });
-    setError(null);
   };
 
   const getDeviceIcon = (type: string) => {
     switch (type) {
-      case 'pump': return '💧';
-      case 'fan': return '💨';
-      case 'heater': return '🔥';
-      case 'light': return '💡';
-      default: return '⚙️';
+      case 'pump': return <Droplets className="w-5 h-5" />;
+      case 'fan': return <Wind className="w-5 h-5" />;
+      case 'heater': return <Flame className="w-5 h-5" />;
+      case 'light': return <Lightbulb className="w-5 h-5" />;
+      default: return <Zap className="w-5 h-5" />;
     }
   };
 
@@ -207,7 +321,9 @@ export default function SchedulePage() {
       case 'daily':
         return 'Daily';
       case 'weekly':
-        return `Weekly on ${schedule.daysOfWeek?.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}`;
+        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        const selectedDays = schedule.daysOfWeek?.map(d => dayNames[d - 1]).join(', ');
+        return `Weekly on ${selectedDays}`;
       case 'monthly':
         return `Monthly on day ${schedule.dayOfMonth}`;
       case 'once':
@@ -230,24 +346,7 @@ export default function SchedulePage() {
     return action === 'activate' ? 'Turn On' : 'Turn Off';
   };
 
-  const getSelectedDeviceName = () => {
-    const device = devices.find(d => d.id === formData.deviceId);
-    return device ? `${getDeviceIcon(device.type)} ${device.name}` : 'Select a device';
-  };
 
-  const getSelectedActionText = () => {
-    return formData.action === 'activate' ? 'Turn On' : 'Turn Off';
-  };
-
-  const getSelectedRepetitionText = () => {
-    switch (formData.repetition) {
-      case 'daily': return 'Daily';
-      case 'weekly': return 'Weekly';
-      case 'monthly': return 'Monthly';
-      case 'once': return 'Once';
-      default: return 'Daily';
-    }
-  };
 
   if (loading) {
     return (
@@ -279,22 +378,6 @@ export default function SchedulePage() {
           </Button>
         </div>
 
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-4 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            <span className="text-red-700">{error}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setError(null)}
-              className="ml-auto text-red-500 hover:text-red-700"
-            >
-              ×
-            </Button>
-          </div>
-        )}
-
         {/* Create/Edit Form */}
         {showCreateForm && (
           <Card>
@@ -324,10 +407,14 @@ export default function SchedulePage() {
                       value={formData.deviceId} 
                       onValueChange={(v: string) => {
                         const selectedDevice = devices.find(d => d.id === v);
+                        const newDeviceType = selectedDevice?.type || 'pump';
+                        const newCommand = getDeviceCommand(newDeviceType, formData.action);
+                        console.log(`Device changed to ${newDeviceType}, updating command to: ${newCommand}`);
                         setFormData({ 
                           ...formData, 
                           deviceId: v,
-                          deviceType: selectedDevice?.type || 'pump'
+                          deviceType: newDeviceType,
+                          command: newCommand // Update command on device change
                         });
                       }}
                     >
@@ -337,7 +424,10 @@ export default function SchedulePage() {
                       <SelectContent>
                         {devices.map(device => (
                           <SelectItem className='cursor-pointer' key={device.id} value={device.id}>
-                            {getDeviceIcon(device.type)} {device.name}
+                            <span className="flex items-center gap-2">
+                              {getDeviceIcon(device.type)}
+                              {device.name}
+                            </span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -350,7 +440,16 @@ export default function SchedulePage() {
                     <Label className='pl-1 pb-2'>Action</Label>
                     <Select 
                       value={formData.action} 
-                      onValueChange={(v: string) => setFormData({ ...formData, action: v as 'activate' | 'deactivate' })}
+                      onValueChange={(v: string) => {
+                        const newAction = v as 'activate' | 'deactivate';
+                        const newCommand = getDeviceCommand(formData.deviceType, newAction);
+                        console.log(`Action changed to ${newAction}, updating command to: ${newCommand}`);
+                        setFormData({ 
+                          ...formData, 
+                          action: newAction,
+                          command: newCommand // Update command on action change
+                        });
+                      }}
                     >
                       <SelectTrigger className="w-full cursor-pointer">
                         <SelectValue placeholder="Select action" />
@@ -369,6 +468,17 @@ export default function SchedulePage() {
                       step={1}                                
                       use12Hour={false}                       // set true for AM/PM UI
                     />
+                  </div>
+                </div>
+
+                {/* Command Display */}
+                <div>
+                  <Label className='pl-1 pb-2'>Command</Label>
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
+                    <code className="text-sm font-mono text-gray-700">{formData.command}</code>
+                    <p className="text-xs text-gray-500 mt-1">
+                      This command will be sent to the device when the schedule executes
+                    </p>
                   </div>
                 </div>
 
@@ -394,21 +504,21 @@ export default function SchedulePage() {
                   <div>
                     <Label>Days of Week</Label>
                     <div className="flex gap-2 mt-2">
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
                         <label key={day} className="flex items-center gap-1">
                           <input
                             type="checkbox"
-                            checked={formData.daysOfWeek?.includes(index) || false}
+                            checked={formData.daysOfWeek?.includes(index + 1) || false}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setFormData({
                                   ...formData,
-                                  daysOfWeek: [...(formData.daysOfWeek || []), index]
+                                  daysOfWeek: [...(formData.daysOfWeek || []), index + 1]
                                 });
                               } else {
                                 setFormData({
                                   ...formData,
-                                  daysOfWeek: (formData.daysOfWeek || []).filter(d => d !== index)
+                                  daysOfWeek: (formData.daysOfWeek || []).filter(d => d !== index + 1)
                                 });
                               }
                             }}
@@ -469,12 +579,8 @@ export default function SchedulePage() {
                 )}
 
                 <div className="flex gap-2 pt-4">
-                  <Button 
-                    type="submit" 
-                    className="flex-1 cursor-pointer"
-                    disabled={submitting}
-                  >
-                    {submitting ? 'Saving...' : (editingSchedule ? 'Update Schedule' : 'Create Schedule')}
+                  <Button type="submit" className="flex-1 cursor-pointer">
+                    {editingSchedule ? 'Update Schedule' : 'Create Schedule'}
                   </Button>
                   <Button
                     type="button"
@@ -485,7 +591,6 @@ export default function SchedulePage() {
                       setEditingSchedule(null);
                       resetForm();
                     }}
-                    disabled={submitting}
                   >
                     Cancel
                   </Button>
@@ -527,12 +632,12 @@ export default function SchedulePage() {
                       className={`p-4 border rounded-lg transition-all hover:shadow-md hover:scale-[1.002] cursor-pointer ${
                         schedule.isActive 
                           ? 'border-green-200 bg-green-50 hover:bg-green-100' 
-                          : 'border-gray-300 bg-gray-100 hover:bg-gray-200 opacity-60 blur-[0.5px]'
+                          : 'border-gray-300 bg-gray-100 hover:bg-gray-200 opacity-60'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className={`text-2xl transition-transform hover:scale-110 cursor-pointer ${
+                          <div className={`transition-transform hover:scale-110 cursor-pointer ${
                             schedule.isActive ? '' : 'opacity-50'
                           }`}>{getDeviceIcon(schedule.deviceType)}</div>
                           <div>
@@ -544,13 +649,19 @@ export default function SchedulePage() {
                             }`}>
                               {device?.name} • {getActionText(schedule.action)}
                             </p>
+                                                         <p className={`text-xs ${
+                               schedule.isActive ? 'text-gray-500' : 'text-gray-400'
+                             }`}>
+                               Command: <code className="bg-gray-100 px-1 rounded">{getDeviceCommand(schedule.deviceType, schedule.action)}</code>
+                             </p>
                             <div className={`flex items-center gap-4 mt-1 text-xs ${
                               schedule.isActive ? 'text-gray-500' : 'text-gray-400'
                             }`}>
                               <span className="flex items-center gap-1 cursor-pointer group">
+                                {/* <Clock className="w-3 h-3 transition-transform hover:scale-125 cursor-pointer" /> */}
                                 <span className={`transition-colors ${
                                   schedule.isActive ? 'group-hover:text-blue-600' : ''
-                                }`}>{schedule.time}</span>
+                                }`}>{`${schedule.hour.toString().padStart(2, '0')}:${schedule.minute.toString().padStart(2, '0')}`}</span>
                               </span>
                               {schedule.repetition === 'once' && schedule.date && (
                                 <span className="flex items-center gap-1 cursor-pointer group">
@@ -608,7 +719,7 @@ export default function SchedulePage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleDelete(schedule.id)}
+                            onClick={() => handleDelete(schedule)}
                             className="text-red-600 hover:text-red-700 cursor-pointer transition-all hover:scale-105 hover:bg-red-50 hover:border-red-300"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -660,7 +771,7 @@ export default function SchedulePage() {
             {devices.map(device => (
               <div key={device.id} className="flex items-center justify-between group hover:bg-gray-50 p-2 rounded-md transition-colors cursor-pointer">
                 <div className="flex items-center gap-2">
-                  <span className="text-lg transition-transform hover:scale-110 cursor-pointer">{getDeviceIcon(device.type)}</span>
+                  <span className="transition-transform hover:scale-110 cursor-pointer">{getDeviceIcon(device.type)}</span>
                   <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">{device.name}</span>
                 </div>
                 <div className={`w-3 h-3 rounded-full transition-all ${
@@ -687,6 +798,82 @@ export default function SchedulePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Confirmation Popups */}
+      {showDeleteConfirm && scheduleToAction && (
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl border border-gray-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="text-red-500">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Delete Schedule</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete &quot;{scheduleToAction.name}&quot; schedule? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                onClick={confirmDelete}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+              >
+                Delete
+              </Button>
+              <Button
+                onClick={cancelAction}
+                variant="outline"
+                className="flex-1 cursor-pointer"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showToggleConfirm && scheduleToAction && (
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl border border-gray-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={scheduleToAction.isActive ? 'text-orange-500' : 'text-green-500'}>
+                {scheduleToAction.isActive ? (
+                  <PowerOff className="w-6 h-6" />
+                ) : (
+                  <Power className="w-6 h-6" />
+                )}
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {scheduleToAction.isActive ? 'Disable Schedule' : 'Enable Schedule'}
+              </h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              {scheduleToAction.isActive 
+                ? `Are you sure you want to disable &quot;${scheduleToAction.name}&quot; schedule? The schedule will stop running.`
+                : `Are you sure you want to enable &quot;${scheduleToAction.name}&quot; schedule? The schedule will start running.`
+              }
+            </p>
+            <div className="flex gap-3">
+              <Button
+                onClick={confirmToggle}
+                className={`flex-1 cursor-pointer ${
+                  scheduleToAction.isActive 
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
+              >
+                {scheduleToAction.isActive ? 'Disable' : 'Enable'}
+              </Button>
+              <Button
+                onClick={cancelAction}
+                variant="outline"
+                className="flex-1 cursor-pointer"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
