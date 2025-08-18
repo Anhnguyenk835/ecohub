@@ -24,6 +24,8 @@ from app.action_log.action_log_route import router as action_log_router
 from app.scheduler.scheduler_route import router as scheduler_router
 
 from app.services import mqtt_service
+from app.services.scheduler_service import apscheduler_service
+from app.services.command_service import publish_command
 from app.services.firebase_auth import get_verified_user
 # from app.middleware.auth import AuthMiddleware
 
@@ -40,10 +42,20 @@ async def lifespan(app: FastAPI):
     
     # --- CONNECT MQTT ---
     mqtt_service.start_mqtt_service()
+    
+    # --- START APSCHEDULER ---
+    await apscheduler_service.start_scheduler()
+    
+    # Reload schedules from Firestore after APScheduler is started
+    from app.scheduler.scheduler_service import SchedulerService
+    scheduler_service = SchedulerService()
+    active_schedules = await scheduler_service.get_active_schedules()
+    await apscheduler_service.reload_schedules(active_schedules)
 
     yield  # Application is running
     
     # Shutdown
+    apscheduler_service.stop_scheduler()
     mqtt_service.stop_mqtt_service()
     logger.info("Shutting down FastAPI application...")
 
@@ -97,8 +109,8 @@ async def send_command_to_zone_device(zone_id: str, request: CommandRequest, use
         
     logger.info(f"Received API request to send command: {request.command} to zone '{zone_id}'")
     
-    # Gọi hàm publish từ mqtt_service
-    success = mqtt_service.publish_command(zone_id, request.command, user_info=user)
+    # Gọi hàm publish từ command service
+    success = publish_command(zone_id, request.command, user_info=user)
     
     if success:
         return {"status": "success", "message": f"Command '{request.command}' published zone '{zone_id}' successfully."}

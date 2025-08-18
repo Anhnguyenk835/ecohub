@@ -10,6 +10,7 @@ from app.sensor.sensor_service import SensorService
 from app.services.database import db 
 from app.zone.zone_service import ZoneService
 from app.action_log.action_log_service import ActionLogService
+from app.services.command_service import set_mqtt_client, publish_command
 
 logger = get_logger(__name__)
 
@@ -333,33 +334,7 @@ def on_message(client, userdata, msg):
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
 
-def publish_command(zone_id: str, command: str, user_info: dict = None):
-    """Gửi một lệnh điều khiển tới topic command của một zone cụ thể."""
-    try:
-        command_topic = f"ecohub/{zone_id}/commands"
-        result = mqtt_client.publish(command_topic, command)
-        if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info(f"Successfully published command '{command}' to topic '{command_topic}'")
-            if user_info and user_info.get("uid"):
-                log_data = {
-                    "userId": user_info["uid"],
-                    "userName": user_info.get("name", "N/A"),
-                    "zoneId": zone_id,
-                    "action": "SEND_COMMAND",
-                    "details": f"User sent command '{command}' from notification.",
-                    "status": "SUCCESS"
-                }
-                # Chạy bất đồng bộ để không block response
-                asyncio.create_task(action_log_service.create_action_log(log_data))
-                logger.info(f"Action log created for user {user_info['uid']} sending command {command}")
 
-            return True
-        else:
-            logger.error(f"Failed to publish command '{command}'. Return code: {result.rc}")
-            return False
-    except Exception as e:
-        logger.error(f"Exception while publishing command: {e}")
-        return False
     
 def connect_mqtt():
     """Connect to the MQTT broker."""
@@ -375,6 +350,9 @@ def start_mqtt_service():
         # Gán các hàm callback cho client
         mqtt_client.on_connect = on_connect
         mqtt_client.on_message = on_message
+        
+        # Set the MQTT client reference in command service
+        set_mqtt_client(mqtt_client)
         
         logger.info("Connecting to MQTT broker...")
         mqtt_client.connect(settings.mqtt_broker_host, settings.mqtt_port, 60)

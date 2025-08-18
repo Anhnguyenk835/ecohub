@@ -3,6 +3,7 @@ from typing import List, Dict, Optional
 
 from app.scheduler.scheduler_model import ScheduleCreate, ScheduleUpdate, ScheduleResponse
 from app.scheduler.scheduler_service import SchedulerService
+from app.services.scheduler_service import apscheduler_service
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -115,3 +116,39 @@ async def delete_all_schedules_for_device(device_id: str):
     if not success:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not delete schedules for device")
     return None
+
+@router.get("/jobs/info", response_model=List[Dict])
+async def get_all_jobs_info():
+    """
+    Get information about all scheduled jobs in APScheduler.
+    """
+    jobs = apscheduler_service.get_all_jobs()
+    return jobs
+
+@router.get("/jobs/{schedule_id}/info", response_model=Dict)
+async def get_job_info(schedule_id: str):
+    """
+    Get information about a specific scheduled job in APScheduler.
+    """
+    job_info = apscheduler_service.get_job_info(schedule_id)
+    if not job_info:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Job with ID {schedule_id} not found")
+    return job_info
+
+@router.post("/reload", status_code=status.HTTP_200_OK)
+async def reload_schedules():
+    """
+    Reload all schedules from Firestore and register them in APScheduler.
+    Useful for manual reload or after backend restart.
+    """
+    try:
+        # Get active schedules from Firestore
+        active_schedules = await scheduler_service.get_active_schedules()
+        
+        # Reload them in APScheduler
+        await apscheduler_service.reload_schedules(active_schedules)
+        
+        return {"status": "success", "message": f"Schedules reloaded successfully. {len(active_schedules)} active schedules found."}
+    except Exception as e:
+        logger.error(f"Error reloading schedules: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not reload schedules")
