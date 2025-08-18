@@ -14,8 +14,8 @@ class Thresholds(BaseModel):
     airHumidity: Optional[ThresholdSetting] = Field(None, description="Humidity threshold (%)")
     soilMoisture: Optional[ThresholdSetting] = Field(None, description="Soil Moisture threshold (%)")
     lightIntensity: Optional[ThresholdSetting] = Field(None, description="Light Intensity threshold (lux)")
-    ph: Optional[ThresholdSetting] = Field(None, validation_alias=AliasChoices('pH', 'ph'), description="pH threshold")
-    co2: Optional[ThresholdSetting] = Field(None, validation_alias=AliasChoices('Co2', 'co2'), description="Co2 threshold (ppm)")
+    ph: Optional[ThresholdSetting] = Field(None, description="pH threshold")
+    co2: Optional[ThresholdSetting] = Field(None, description="Co2 threshold (ppm)")
 
     class Config:
         populate_by_name = True 

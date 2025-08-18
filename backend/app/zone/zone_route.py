@@ -98,3 +98,14 @@ async def delete_zone(zone: dict = Depends(get_zone_or_404)):
     if not success:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not delete zone")
     return None 
+
+@router.get("/{zone_id}/settings-data", response_model=Dict[str, Any])
+async def get_zone_raw_data_for_settings(zone: dict = Depends(get_zone_or_404)):
+    """
+    Lấy dữ liệu "thô" của một khu vực trực tiếp từ Firestore để dùng cho trang Cài đặt.
+    Endpoint này bỏ qua model Pydantic phức tạp để đảm bảo tất cả các trường
+    trong 'thresholds' được trả về đầy đủ.
+    """
+    logger.info(f"Fetching raw settings data for zone_id: {zone['id']}")
+
+    return zone
