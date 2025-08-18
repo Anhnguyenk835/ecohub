@@ -1,23 +1,20 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useState } from "react";
 import { Droplets, Fan, Lightbulb, Power, Wifi, AlertTriangle } from "lucide-react";
-import mqtt, { MqttClient } from "mqtt";
 import { post } from '@/lib/api';
 import { toast } from 'sonner';
+import { useMqtt } from "@/contexts/MqttContext";
+
 /**
- * EcoHub – Circular On/Off Toggles (React + MQTT over WebSocket)
- * - Kết nối MQTT qua WebSocket (NEXT_PUBLIC_MQTT_URL hoặc HiveMQ public).
- * - Subscribe status (retained) để hiển thị đúng ON/OFF ngay khi load.
- * - Publish lệnh khi bấm nút.
- * - Có trạng thái pending và báo offline/online.
- *
- * Dùng:
- *  import dynamic from "next/dynamic";
- *  const EcoHubSwitches = dynamic(() => import("@/components/ui/EcoHubSwitches"), { ssr: false });
- *  <EcoHubSwitches embedded /> // khi nhúng vào một trang khác
+ * EcoHub – Circular On/Off Toggles
+ * - Component này hiển thị các nút điều khiển thiết bị cho một zone cụ thể.
+ * - Nó lấy trạng thái thời gian thực từ MqttContext toàn cục.
+ * - Gửi lệnh điều khiển qua API khi người dùng nhấn nút.
+ * - Hiển thị trạng thái pending và vô hiệu hóa nút khi offline.
  */
 
+// Định nghĩa kiểu dữ liệu cho trạng thái của các thiết bị
 type ActuatorStates = {
   Fan: 'ON' | 'OFF';
   Heater: 'ON' | 'OFF';
@@ -25,6 +22,7 @@ type ActuatorStates = {
   Light: 'ON' | 'OFF';
 };
 
+// Trạng thái khởi tạo mặc định
 const initialActuatorStates: ActuatorStates = {
   Fan: 'OFF',
   Heater: 'OFF',
@@ -32,6 +30,7 @@ const initialActuatorStates: ActuatorStates = {
   Light: 'OFF',
 };
 
+// Cấu hình cho các nút điều khiển
 const deviceControls = [
   { 
     name: 'Pump', 
@@ -63,32 +62,8 @@ const deviceControls = [
   },
 ] as const;
 
-// Command mapping for schedules (matches the schedule form)
-export const getDeviceCommand = (deviceType: string, action: string): string => {
-  const commandMap: Record<string, Record<string, string>> = {
-    pump: {
-      activate: 'PUMP_WATER_ON',
-      deactivate: 'PUMP_WATER_OFF'
-    },
-    fan: {
-      activate: 'TURN_FAN_ON',
-      deactivate: 'TURN_FAN_OFF'
-    },
-    heater: {
-      activate: 'TURN_HEATER_ON',
-      deactivate: 'TURN_HEATER_OFF'
-    },
-    light: {
-      activate: 'TURN_LIGHT_ON',
-      deactivate: 'TURN_LIGHT_OFF'
-    }
-  };
-  
-  return commandMap[deviceType]?.[action] || '';
-};
 
-type DeviceIcon = "pump" | "fan" | "light" | "power";
-
+// Component nút bấm hình tròn
 function CircleButton({
   active,
   disabled,
@@ -100,7 +75,7 @@ function CircleButton({
   active: boolean;
   disabled?: boolean;
   label: string;
-  icon: React.ElementType; // Sửa lại để nhận component icon trực tiếp
+  icon: React.ElementType;
   onClick: () => void;
   pending?: boolean;
 }) {
@@ -129,96 +104,46 @@ function CircleButton({
   );
 }
 
+// Component hiển thị trạng thái kết nối
 function Pill({ children }: { children: React.ReactNode }) {
   return <div className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs bg-neutral-800 text-neutral-100">{children}</div>;
 }
 
+
+// Component chính
 export default function EcoHubSwitches({ zoneId, onAction }: { zoneId: string, onAction?: (command: string, actionText: string) => void;}) {
-  const [connected, setConnected] = useState(false);
-  const [actuatorStates, setActuatorStates] = useState<ActuatorStates>(initialActuatorStates);
+  // Lấy state toàn cục từ MqttContext
+  const { connected, actuatorStates, deviceOnlineStatus } = useMqtt();
+  
+  // State `pending` là state cục bộ, chỉ dùng để hiển thị UI tạm thời
   const [pending, setPending] = useState<Record<string, boolean>>({});
-  const clientRef = useRef<MqttClient | null>(null);
-  const [deviceOnline, setDeviceOnline] = useState(false);
 
-  useEffect(() => {
-    if (!zoneId) return;
+  // Trích xuất dữ liệu cho zone hiện tại từ state toàn cục
+  const zoneActuatorStates = actuatorStates[zoneId] || initialActuatorStates;
+  const isDeviceOnline = deviceOnlineStatus[zoneId] || false;
 
-    const wsUrl = process.env.NEXT_PUBLIC_MQTT_BROKER_URL || "ws://localhost:8884";
-    const client = mqtt.connect(wsUrl);
-    clientRef.current = client;
-
-    // Lắng nghe topic sensors của zone cụ thể
-    const sensorTopic = `ecohub/${zoneId}/sensors`;
-    const deviceStatusTopic = `ecohub/${zoneId}/device_status`;
-
-    client.on("connect", () => {
-      setConnected(true);
-      client.subscribe(sensorTopic, { qos: 1 });
-      client.subscribe(deviceStatusTopic, { qos: 1 });
-    });
-
-    const setOffline = () => {
-      setConnected(false);
-      setDeviceOnline(false);
-    };
-
-    client.on("reconnect", setOffline);
-    client.on("close", setOffline);
-    client.on("error", setOffline);
-
-    client.on("message", (topic: string, payload: Uint8Array) => {
-      const message = payload.toString();
-      if (topic === deviceStatusTopic) {
-        console.log(`Device status for ${zoneId}: ${message}`);
-        setDeviceOnline(message === 'online');
-      }
-      if (topic === sensorTopic) {
-        try {
-          const data = JSON.parse(payload.toString());
-          // Đọc trạng thái từ object actuatorStates
-          if (data.actuatorStates) {
-            setActuatorStates(data.actuatorStates);
-            setPending({}); // Xóa pending khi nhận được trạng thái mới
-          }
-        } catch (e) {
-          console.error("Failed to parse sensor data:", e);
-        }
-      }
-    });
-
-    return () => {
-      if (clientRef.current) {
-        clientRef.current.end(true);
-      }
-    };
-  }, [zoneId]);
-
-  // Hàm gửi lệnh đã được cập nhật
+  // Hàm gửi lệnh khi người dùng nhấn nút
   const sendCommand = async (
     deviceKey: keyof ActuatorStates,
     commands: { ON: string; OFF: string },
-    text: { ON: string; OFF: string } // Thêm text để truyền vào onCommand
+    text: { ON: string; OFF: string }
   ) => {
-    if (!connected || !deviceOnline) {
-      console.log("mqtt connection: ", connected);
-      console.log("device online: ", deviceOnline);
+    // Kiểm tra trạng thái kết nối và thiết bị từ context
+    if (!connected || !isDeviceOnline) {
       toast("Cannot send command: Device is offline or not connected.", {
         description: "Please check the device connection and try again.",
-        action: {
-          label: "Dismiss",
-          onClick: () => {},
-        },
       });
       return;
     }
 
-    const currentState = actuatorStates[deviceKey];
+    const currentState = zoneActuatorStates[deviceKey];
     const nextStateOn = currentState !== "ON";
     const commandToSend = nextStateOn ? commands.ON : commands.OFF;
     const actionText = nextStateOn ? text.ON : text.OFF;
 
     setPending((p) => ({ ...p, [deviceKey]: true }));
-    // GỌI HÀM onCommand (nếu nó được truyền vào) ĐỂ TẠO THÔNG BÁO
+    
+    // Gọi hàm onAction (nếu có) để tích hợp với hệ thống thông báo
     if (onAction) {
       onAction(commandToSend, actionText);
     }
@@ -226,18 +151,25 @@ export default function EcoHubSwitches({ zoneId, onAction }: { zoneId: string, o
     try {
       // Gửi lệnh qua API
       await post(`/zones/${zoneId}/command`, { command: commandToSend });
-      // toast(`Command '${commandToSend}' sent.`, { type: "success" });
     } catch (error) {
       toast("Failed to send command.", { type: "error" });
+      // Rollback trạng thái pending nếu gửi API thất bại
       setPending((p) => ({ ...p, [deviceKey]: false }));
+    } finally {
+      // Đặt một timeout để gỡ trạng thái pending, phòng trường hợp
+      // tin nhắn MQTT phản hồi bị mất và nút bị kẹt ở trạng thái loading
+      setTimeout(() => {
+        setPending((p) => ({ ...p, [deviceKey]: false }));
+      }, 5000); // 5 giây
     }
   };
 
   return (
     <div className="p-6 bg-white rounded-lg shadow-md h-full">
       <header className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">EcoHub – Điều khiển thiết bị</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">EcoHub – Device Control</h1>
         <div className="flex items-center gap-2">
+          {/* Hiển thị trạng thái kết nối MQTT toàn cục */}
           {connected ? (
             <Pill>
               <Wifi className="w-4 h-4" />
@@ -246,26 +178,27 @@ export default function EcoHubSwitches({ zoneId, onAction }: { zoneId: string, o
           ) : (
             <Pill>
               <AlertTriangle className="w-4 h-4" />
-              <span>Đang kết nối MQTT…</span>
+              <span>Connecting to MQTT...</span>
             </Pill>
           )}
         </div>
       </header>
 
       <section>
-        <h2 className="text-lg font-medium mb-3">Thiết bị</h2>
+        <h2 className="text-lg font-medium mb-3">Actuators</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 justify-items-center">
-          {/* Sử dụng cấu trúc dữ liệu mới để render các nút */}
           {deviceControls.map((d) => {
-            const isOn = actuatorStates?.[d.deviceKey] === "ON";
+            // Lấy trạng thái ON/OFF từ state của zone cụ thể
+            const isOn = zoneActuatorStates?.[d.deviceKey] === "ON";
             return (
               <div key={d.deviceKey} className="grid place-items-center gap-2">
                 <CircleButton
                   label={d.name}
-                  icon={d.icon} // Truyền thẳng component icon
+                  icon={d.icon}
                   active={!!isOn}
                   pending={!!pending[d.deviceKey]}
-                  disabled={!connected || !actuatorStates}
+                  // Vô hiệu hóa nút nếu mất kết nối MQTT hoặc thiết bị của zone này offline
+                  disabled={!connected || !isDeviceOnline}
                   onClick={() => sendCommand(d.deviceKey, d.commands, d.text)}
                 />
               </div>

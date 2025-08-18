@@ -28,7 +28,7 @@ import { getSchedules, createSchedule, updateSchedule, deleteSchedule, toggleSch
 import { useParams } from 'next/navigation';
 import { Calendar, Settings, Trash2, Edit, Plus, Power, PowerOff, Droplets, Wind, Flame, Lightbulb, Zap } from 'lucide-react';
 import { format } from "date-fns";
-import { getDeviceCommand } from '@/components/ui/EcoHubSwitches';
+import { getDeviceCommand } from '@/lib/deviceUtils';
 
 export default function SchedulePage() {
   const params = useParams();
