@@ -1,0 +1,23 @@
+{
+  "name": "soil-moisture-sensor",
+  "author": "Fernanda Salomé",
+  "pins": [
+    "VCC",
+    "GND",
+    "A0",
+    "D0",
+    "",
+    "",
+    ""
+  ],
+  "controls": [
+    {
+      "id":"soilMoisture",
+      "label":"Soil Moisture",
+      "type":"range",
+      "min":0,
+      "max":100,
+      "step":1
+    }
+  ]
+}
