@@ -24,6 +24,21 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import NotificationPreferences from "@/components/layout/NotificationPreferences" 
 
+const SENSOR_DISPLAY_NAMES: { [key: string]: string } = {
+  'PH': 'pH Sensor',
+  'CO2': 'CO2 Sensor',
+  'Light': 'Light Intensity Sensor',
+  'Soil': 'Soil Moisture Sensor',
+  'DHT22': 'Temperature & Humidity Sensor'
+};
+
+const ACTUATOR_DISPLAY_NAMES: { [key: string]: string } = {
+  'Light': 'Led',
+  'Fan': 'Fan',
+  'WaterPump': 'Water Pump',
+  'Heater': 'Heater'
+};
+
 interface ThresholdSetting {
   enabled: boolean
   min: number
@@ -100,9 +115,9 @@ export default function ZoneSettingsPage() {
             fetch(`${API_BASE_URL}/actuators?zone_id=${zoneId}`, { headers })
         ]);
 
-        if (!zoneRes.ok) throw new Error(`Lỗi tải dữ liệu khu vực: ${zoneRes.status} ${zoneRes.statusText}`)
-        if (!sensorsRes.ok) throw new Error(`Lỗi tải danh sách cảm biến: ${sensorsRes.statusText}`)
-        if (!actuatorsRes.ok) throw new Error(`Lỗi tải danh sách động cơ: ${actuatorsRes.statusText}`)
+        if (!zoneRes.ok) throw new Error(`Error loading area data: ${zoneRes.status} ${zoneRes.statusText}`)
+        if (!sensorsRes.ok) throw new Error(`Error loadinng sensors: ${sensorsRes.statusText}`)
+        if (!actuatorsRes.ok) throw new Error(`Error loading actuators: ${actuatorsRes.statusText}`)
         
         const zoneJson: ZoneData = await zoneRes.json()
         const sensorsJson: Sensor[] = await sensorsRes.json()
@@ -288,24 +303,25 @@ export default function ZoneSettingsPage() {
       
       <Card>
           <CardHeader>
-            <CardTitle>Quản lý Thiết bị</CardTitle>
-            <CardDescription>Xem và quản lý các cảm biến và cơ cấu chấp hành trong khu vực.</CardDescription>
+            <CardTitle>Device Control</CardTitle>
+            <CardDescription>Manage Sensors & Actuators in the zone</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="sensors">
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="sensors">Cảm biến ({sensors.length})</TabsTrigger>
-                <TabsTrigger value="actuators">Cơ cấu chấp hành ({actuators.length})</TabsTrigger>
-                <TabsTrigger value="notifications">Thông báo</TabsTrigger>
+                <TabsTrigger value="sensors">Sensors ({sensors.length})</TabsTrigger>
+                <TabsTrigger value="actuators">Actuators ({actuators.length})</TabsTrigger>
+                <TabsTrigger value="notifications">Notification</TabsTrigger>
               </TabsList>
               <TabsContent value="sensors" className="mt-4 space-y-2">
                  {sensors.map(sensor => (
                     <div key={sensor.id} className="flex items-center justify-between p-2 border rounded-md">
                         <div>
-                            <p className="font-medium">{sensor.name}</p>
+                            <p className="font-medium">
+                              {SENSOR_DISPLAY_NAMES[sensor.type] || sensor.name}
+                            </p>
                             <p className="text-sm text-muted-foreground">{sensor.type}</p>
                         </div>
-                        <Button variant="ghost" size="sm">Chỉnh sửa</Button>
                     </div>
                  ))}
               </TabsContent>
@@ -313,10 +329,11 @@ export default function ZoneSettingsPage() {
                  {actuators.map(actuator => (
                     <div key={actuator.id} className="flex items-center justify-between p-2 border rounded-md">
                         <div>
-                            <p className="font-medium">{actuator.name}</p>
+                            <p className="font-medium">
+                              {ACTUATOR_DISPLAY_NAMES[actuator.type] || actuator.name}
+                            </p>
                             <p className="text-sm text-muted-foreground">{actuator.type}</p>
                         </div>
-                        <Button variant="ghost" size="sm">Chỉnh sửa</Button>
                     </div>
                  ))}
               </TabsContent>
@@ -329,25 +346,25 @@ export default function ZoneSettingsPage() {
 
       <Card className="border-destructive">
           <CardHeader>
-            <CardTitle className="text-destructive">Vùng Nguy hiểm</CardTitle>
-            <CardDescription>Các hành động sau không thể hoàn tác. Hãy cẩn thận.</CardDescription>
+            <CardTitle className="text-destructive">Dangerous Zone</CardTitle>
+            <CardDescription>The following actions cannot be undone. Be careful.</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="font-medium">Xóa khu vực này</p>
-              <p className="text-sm text-muted-foreground">Toàn bộ dữ liệu, thiết bị và lịch sử sẽ bị xóa vĩnh viễn.</p>
+              <p className="font-medium">Delete zone</p>
+              <p className="text-sm text-muted-foreground">All data, devices and history will be permanently deleted.</p>
             </div>
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
                 <DialogTrigger asChild>
-                    <Button variant="destructive">Xóa khu vực</Button>
+                    <Button variant="destructive">Delete</Button>
                 </DialogTrigger>
                 <DialogContent>
                     <DialogHeader>
-                    <DialogTitle>Bạn có chắc chắn muốn xóa?</DialogTitle>
+                    <DialogTitle>Are you sure you want to delete?</DialogTitle>
                     <DialogDescription>
-                        Hành động này không thể hoàn tác. Toàn bộ dữ liệu của khu vực 
+                        This action cannot be undone. All data for the 
                         <span className="font-bold text-foreground"> {zoneData?.name} </span> 
-                        sẽ bị xóa vĩnh viễn. Để xác nhận, vui lòng nhập tên của khu vực vào ô bên dưới.
+                        will be deleted. To confirm, please enter the name of the area in the box below.
                     </DialogDescription>
                     </DialogHeader>
                     <Input 
@@ -356,13 +373,13 @@ export default function ZoneSettingsPage() {
                         placeholder={zoneData?.name}
                     />
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Hủy</Button>
+                      <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancel</Button>
                       <Button 
                           variant="destructive"
                           disabled={deleteConfirmationInput !== zoneData?.name}
                           onClick={handleDeleteZone}
                       >
-                          Tôi hiểu, xóa khu vực này
+                          I understand, delete this zone
                       </Button>
                   </DialogFooter>
                 </DialogContent>

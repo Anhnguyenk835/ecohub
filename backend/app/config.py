@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     mail_port: int = int(os.getenv("MAIL_PORT", "587"))
     mail_server: str = os.getenv("MAIL_SERVER", "smtp.gmail.com")
     frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+    mail_starttls: bool = True
+    mail_ssl_tls: bool = False
     
     class Config:
         env_file = ".env"

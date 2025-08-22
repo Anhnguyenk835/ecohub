@@ -7,6 +7,8 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.zone_status.zone_status_service import ZoneStatusService
 from app.readings_history.reading_history_service import ReadingHistoryService
+from app.readings_actuator_history.reading_actuator_history_service import ReadingActuatorHistoryService
+from app.actuator.actuator_service import ActuatorService
 from app.sensor.sensor_service import SensorService
 from app.services.database import db 
 from app.zone.zone_service import ZoneService
@@ -22,6 +24,10 @@ mqtt_client = mqtt.Client(client_id=settings.mqtt_client_id,
 
 zone_status_service = ZoneStatusService()
 reading_history_service = ReadingHistoryService()
+
+actuator_history_service = ReadingActuatorHistoryService()
+actuator_service = ActuatorService()
+
 sensor_service = SensorService()
 zone_service = ZoneService()
 action_log_service = ActionLogService()
@@ -319,8 +325,6 @@ async def process_sensor_data(zone_id: str, payload_data: dict):
             "status": calculated_status, 
             "lastReadings": payload_data,
             "suggestion": calculated_suggestion
-            # Bạn có thể thêm logic so sánh ngưỡng và cập nhật "status" ở đây
-            # "status": calculate_overall_status(payload_data, thresholds)
         }
         
         # Call service for update
@@ -391,6 +395,49 @@ async def process_sensor_data(zone_id: str, payload_data: dict):
 
     except Exception as e:
         logger.error(f"Error saving to readings_history for zone_id {zone_id}: {e}", exc_info=True)
+
+    try:
+        actuator_states = payload_data.get("actuatorStates", {})
+        if not actuator_states:
+            logger.info(f"No actuatorStates in payload for zone {zone_id}. Skipping actuator history.")
+            return
+
+        actuators_in_zone = await actuator_service.get_all_actuators(zone_id=zone_id)
+        if not actuators_in_zone:
+            logger.warning(f"No actuators found for zone_id {zone_id}. Cannot save actuator history.")
+            return
+
+        actuator_map = {actuator.get('type'): actuator.get('id') for actuator in actuators_in_zone if actuator.get('type') and actuator.get('id')}
+        logger.debug(f"Built actuator map for zone {zone_id}: {actuator_map}")
+
+        actuator_batch = db.batch()
+        actuator_history_ref = actuator_history_service.collection
+        records_to_create = 0
+
+        for actuator_type, state in actuator_states.items():
+            actuator_id = actuator_map.get(actuator_type)
+            
+            if actuator_id:
+                history_doc_ref = actuator_history_ref.document()
+                history_data = {
+                    "readAt": now,
+                    "actuatorId": actuator_id,
+                    "type": actuator_type,
+                    "state": state,
+                    "zoneId": zone_id
+                }
+                actuator_batch.set(history_doc_ref, history_data)
+                records_to_create += 1
+            else:
+                logger.warning(f"No matching actuator found for type '{actuator_type}' in zone {zone_id}.")
+
+        if records_to_create > 0:
+            await asyncio.to_thread(actuator_batch.commit)
+            logger.info(f"Successfully saved {records_to_create} records to readings_actuator_history for zone {zone_id}.")
+
+    except Exception as e:
+        logger.error(f"Error saving to readings_actuator_history for zone_id {zone_id}: {e}", exc_info=True)
+
 
 def on_connect(client, userdata, flags, rc):
     """Callback for when the client connects to the broker."""

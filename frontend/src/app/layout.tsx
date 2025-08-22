@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from 'sonner';
 // Import NotificationProvider của bạn
 import { NotificationProvider } from '@/contexts/NotificationContext'; 
+import { MqttProvider } from '@/contexts/MqttContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -25,11 +26,11 @@ export default function RootLayout({
         <AuthProvider>
           {/* NotificationProvider bọc bên trong AuthProvider và bọc children */}
           {/* Điều này cho phép các thông báo có thể truy cập thông tin người dùng nếu cần */}
-          <NotificationProvider>
-            {/* {children} là nơi các trang của bạn sẽ được render */}
-            {/* Bây giờ tất cả các trang này đều có thể truy cập cả AuthContext và NotificationContext */}
-            {children}
-          </NotificationProvider>
+         <MqttProvider> 
+            <NotificationProvider>
+              {children}
+            </NotificationProvider>
+          </MqttProvider>
         </AuthProvider>
         
         {/* Toaster có thể đặt ở đây, nó không phụ thuộc vào context */}
