@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     TEMP_THRESHOLD_LOW: float = float(os.getenv("TEMP_THRESHOLD_LOW", 25.0))
     SOIL_MOISTURE_THRESHOLD_LOW: int = int(os.getenv("SOIL_MOISTURE_THRESHOLD_LOW", 30))
     
+    # Email Configuration
+    mail_username: str = os.getenv("MAIL_USERNAME", "")
+    mail_password: str = os.getenv("MAIL_PASSWORD", "")
+    mail_from: str = os.getenv("MAIL_FROM", "noreply@ecohub.com")
+    mail_port: int = int(os.getenv("MAIL_PORT", "587"))
+    mail_server: str = os.getenv("MAIL_SERVER", "smtp.gmail.com")
+    frontend_url: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

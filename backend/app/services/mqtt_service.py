@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 import json
 import paho.mqtt.client as mqtt
+from fastapi.concurrency import run_in_threadpool
 from app.config import settings
 from app.utils.logger import get_logger
 from app.zone_status.zone_status_service import ZoneStatusService
@@ -11,6 +12,7 @@ from app.services.database import db
 from app.zone.zone_service import ZoneService
 from app.action_log.action_log_service import ActionLogService
 from app.services.command_service import set_mqtt_client, publish_command
+from app.services.notification_service import notification_service
 
 logger = get_logger(__name__)
 
@@ -23,6 +25,18 @@ reading_history_service = ReadingHistoryService()
 sensor_service = SensorService()
 zone_service = ZoneService()
 action_log_service = ActionLogService()
+
+def get_event_loop_status():
+    """Get the current event loop status for debugging."""
+    try:
+        loop = asyncio.get_event_loop()
+        return {
+            "running": loop.is_running(),
+            "closed": loop.is_closed(),
+            "loop_id": id(loop)
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) -> str:
     overall_status = "Good" 
@@ -121,20 +135,13 @@ async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) ->
 
     issue_status.sort(key=lambda x: x["priority"], reverse=True)
 
-    for issue in issue_status:
-        publish_notification(
-            zone_id, 
-            issue["status"], 
-            issue["message"], 
-            issue["suggestion"],
-            issue["suggestion_text"] # Truyền tham số mới
-        )
-
+    # Get the most critical issue for return value
     most_critical_issue = issue_status[0]
     overall_status = most_critical_issue["status"]
     suggestion = most_critical_issue["suggestion"]
 
-    # Chỉ hiện cái status có độ ưu tiên cao nhất ở home, dashboard
+    # Note: Email sending is now handled directly in process_sensor_data
+    # when zone status is updated, not through publish_notification
     
     return overall_status, suggestion
 
@@ -158,6 +165,107 @@ def publish_notification(zone_id: str, alert_type: str, message: str, suggestion
             logger.error(f"Failed to send notification to '{notification_topic}'. RC: {result.rc}")
     except Exception as e:
         logger.error(f"Exception while publishing notification: {e}")
+
+async def trigger_email_notifications(zone_id: str, notification: dict):
+    """Trigger email notifications for a zone alert."""
+    try:
+        logger.info(f"🚨 ALERT RECEIVED - Zone: {zone_id}, Type: {notification.get('type')}, Message: {notification.get('message')}")
+        logger.info(f"🔧 NOTIFICATION PAYLOAD - Zone: {zone_id}, Payload: {notification}")
+        
+        # Determine severity based on alert type
+        severity = "info"
+        if any(keyword in notification.get("type", "").lower() for keyword in ["hot", "cool", "high", "low"]):
+            severity = "critical"
+        elif any(keyword in notification.get("type", "").lower() for keyword in ["water", "light"]):
+            severity = "warning"
+        
+        logger.info(f"📊 SEVERITY DETERMINED - Zone: {zone_id}, Severity: {severity}")
+        
+        # Add severity to notification
+        notification_with_severity = {**notification, "severity": severity}
+        logger.info(f"🔧 ENHANCED NOTIFICATION - Zone: {zone_id}, Enhanced: {notification_with_severity}")
+        
+        logger.info(f"📧 TRIGGERING EMAIL NOTIFICATIONS - Zone: {zone_id}, Severity: {severity}")
+        logger.info(f"🔧 CALLING NOTIFICATION SERVICE - Zone: {zone_id}, Service: {notification_service}")
+        
+        # For now, we'll send to all users (you can modify this logic later)
+        # In a real app, you'd get the current user from the context
+        logger.info(f"📧 CALLING send_notification_emails - Zone: {zone_id}")
+        result = await notification_service.send_notification_emails(zone_id, notification_with_severity)
+        logger.info(f"📧 NOTIFICATION SERVICE RESULT - Zone: {zone_id}, Result: {result}")
+        
+        if result["success"]:
+            logger.info(f"✅ EMAIL NOTIFICATIONS SUCCESS - Zone: {zone_id}, Emails Sent: {result['emails_sent']}/{result['total_users']}, Eligible Users: {result.get('eligible_users', 'N/A')}")
+        else:
+            logger.error(f"❌ EMAIL NOTIFICATIONS FAILED - Zone: {zone_id}, Error: {result.get('error', 'Unknown error')}")
+            
+    except Exception as e:
+        logger.error(f"💥 CRITICAL ERROR in email notifications - Zone: {zone_id}, Error: {str(e)}")
+        logger.exception(f"Full traceback for zone {zone_id}:")
+
+async def send_direct_alert_email(zone_id: str, status: str, suggestion: str):
+    """Send email directly when zone status changes to severe."""
+    try:
+        logger.info(f"📧 DIRECT EMAIL TRIGGERED - Zone: {zone_id}, Status: {status}, Suggestion: {suggestion}")
+        
+        # Get zone info for better email content
+        zone_info = await zone_service.get_zone(zone_id)
+        zone_name = zone_info.get("name", zone_id) if zone_info else zone_id
+        
+        # Get zone owner for email
+        zone_owner_uid = zone_info.get("owner") if zone_info else None
+        if not zone_owner_uid:
+            logger.warning(f"⚠️ NO ZONE OWNER - Zone: {zone_id}, Cannot send email")
+            return
+        
+        # Get user profile
+        users_ref = db.collection("users")
+        user_doc = await run_in_threadpool(users_ref.document(zone_owner_uid).get)
+        
+        if not user_doc.exists:
+            logger.warning(f"⚠️ USER NOT FOUND - Zone: {zone_id}, UID: {zone_owner_uid}")
+            return
+        
+        user_data = user_doc.to_dict()
+        user_email = user_data.get("email")
+        user_name = user_data.get("displayName", "User")
+        
+        if not user_email or not user_data.get("emailVerified", False):
+            logger.warning(f"⚠️ USER NOT ELIGIBLE - Zone: {zone_id}, Email: {user_email}, Verified: {user_data.get('emailVerified')}")
+            return
+        
+        logger.info(f"👤 USER FOUND FOR EMAIL - Zone: {zone_id}, Email: {user_email}, Name: {user_name}")
+        
+        # Create email notification
+        notification_data = {
+            "type": status,
+            "message": f"Zone '{zone_name}' status changed to: {status}",
+            "suggestion": suggestion,
+            "severity": "critical" if status in ["Too Hot", "Too Cool"] else "warning",
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        logger.info(f"📧 SENDING DIRECT ALERT EMAIL - Zone: {zone_id}, Recipient: {user_email}")
+        
+        # Import email service
+        from app.services.email_service import email_service
+        
+        # Send email directly
+        success = await email_service.send_notification_email(
+            user_email,
+            user_name,
+            notification_data,
+            zone_id
+        )
+        
+        if success:
+            logger.info(f"✅ DIRECT ALERT EMAIL SENT - Zone: {zone_id}, Recipient: {user_email}")
+        else:
+            logger.error(f"❌ DIRECT ALERT EMAIL FAILED - Zone: {zone_id}, Recipient: {user_email}")
+            
+    except Exception as e:
+        logger.error(f"💥 ERROR in direct alert email - Zone: {zone_id}, Error: {str(e)}")
+        logger.exception(f"Direct email error details for zone {zone_id}:")
 
 def publish_completion_notification(zone_id: str, completed_command: str):
     """Gửi một thông báo đặc biệt để báo hiệu một hành động đã hoàn thành."""
@@ -223,6 +331,12 @@ async def process_sensor_data(zone_id: str, payload_data: dict):
 
         if updated_status:
             publish_status_update(zone_id, updated_status)
+            
+                    # Send email directly if status is severe
+        # This bypasses the complex notification system and sends emails immediately
+        if calculated_status in ["Too Hot", "Too Cool", "Need water", "Need light"]:
+            logger.info(f"🚨 SEVERE STATUS DETECTED - Zone: {zone_id}, Status: {calculated_status}")
+            await send_direct_alert_email(zone_id, calculated_status, calculated_suggestion)
             
     except Exception as e:
         logger.error(f"Error updating zone_status for zone_id {zone_id}: {e}", exc_info=True)

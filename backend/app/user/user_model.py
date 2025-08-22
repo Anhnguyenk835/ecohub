@@ -13,13 +13,25 @@ class UserBase(BaseModel):
 
 class UserUpdate(BaseModel):
     """Profile update fields (no password)."""
-    displayName: Optional[str] = Field(None, description="New display name")
+    displayName: Optional[str] = Field(None, description="User display name")
+    notificationPreferences: Optional[dict] = Field(None, description="User notification preferences")
 
 
-class UserResponse(UserBase):
-    """Response model for user profile."""
-    createdAt: datetime = Field(..., description="Time user was created")
-    updatedAt: datetime = Field(..., description="Time user was updated")
+class UserResponse(BaseModel):
+    """User profile response (no sensitive data)."""
+    uid: str
+    email: str
+    displayName: Optional[str] = None
+    emailVerified: bool
+    notificationPreferences: Optional[dict] = None
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+
+class NotificationPreferences(BaseModel):
+    """User notification preferences."""
+    email: bool = Field(True, description="Enable email notifications")
+    severity: Optional[dict] = Field(None, description="Severity preferences")
+    maxPerHour: int = Field(10, description="Maximum notifications per hour")
+    maxPerDay: int = Field(50, description="Maximum notifications per day")
+    zones: Optional[list] = Field(None, description="Specific zones to receive notifications for")
