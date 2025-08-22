@@ -154,70 +154,70 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
    * Hàm để thêm một thông báo mới vào danh sách.
    * Nó tự động thêm id và timestamp.
    */
-  const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'actionState'>) => {
+    const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'actionState'>) => {
     // Kiểm tra xem có thông báo nào đang 'activated' với cùng suggestion không
     setNotifications((prev) => {
       if (notification.is_completion_signal && notification.completed_command) {
-      const completedCommand = notification.completed_command;
+        const completedCommand = notification.completed_command;
+        
+        return prev.map(n => {
+          // Tìm thông báo đang chạy (activated/in_progress) có suggestion khớp với lệnh đã hoàn thành
+          if (
+            n.zoneId === notification.zoneId &&
+            n.suggestion === completedCommand &&
+            (n.actionState === 'in_progress' || n.actionState === 'activated')
+          ) {
+            // Cập nhật trạng thái thành "dismissed" và thay đổi message
+            return { ...n, actionState: 'dismissed' as ActionState, message: `Completed: ${n.message.replace('In progress: ', '')}` };
+          }
+          // Giữ nguyên các thông báo khác
+          return n;
+        });
+      }
+
+      // KỊCH BẢN 2: Đây là một thông báo cảnh báo thông thường
       
-      return prev.map(n => {
-        // Tìm thông báo đang chạy (activated/in_progress) có suggestion khớp với lệnh đã hoàn thành
-        if (
+      // Logic 2a: Xử lý in_progress
+      const existingInProgressIndex = prev.findIndex(
+        (n) =>
           n.zoneId === notification.zoneId &&
-          n.suggestion === completedCommand &&
-          (n.actionState === 'in_progress' || n.actionState === 'activated')
+          n.suggestion && notification.suggestion && n.suggestion === notification.suggestion &&
+          (n.actionState === 'activated' || n.actionState === 'in_progress')
+      );
+
+      if (existingInProgressIndex !== -1) {
+        const updatedNotifications = [...prev];
+        updatedNotifications[existingInProgressIndex] = {
+          ...updatedNotifications[existingInProgressIndex],
+          actionState: 'in_progress' as ActionState,
+          message: `In progress: ${notification.message}`,
+          timestamp: new Date(),
+        };
+        return updatedNotifications;
+      }
+
+      // Logic 2b: Vô hiệu hóa các 'pending' cũ hơn cùng loại
+      const newNotification: Notification = {
+        ...notification,
+        id: uuidv4(),
+        timestamp: new Date(),
+        actionState: notification.suggestion ? 'pending' : 'dismissed',
+      };
+
+      const updatedPrev = prev.map(n => {
+        if (
+          n.zoneId === newNotification.zoneId &&
+          n.suggestion && newNotification.suggestion && n.suggestion === newNotification.suggestion &&
+          n.actionState === 'pending'
         ) {
-          // Cập nhật trạng thái thành "dismissed" và thay đổi message
-          return { ...n, actionState: 'dismissed', message: `Completed: ${n.message.replace('In progress: ', '')}` };
+          return { ...n, actionState: 'dismissed' as ActionState };
         }
-        // Giữ nguyên các thông báo khác
         return n;
       });
-    }
 
-    // KỊCH BẢN 2: Đây là một thông báo cảnh báo thông thường
-    
-    // Logic 2a: Xử lý in_progress
-    const existingInProgressIndex = prev.findIndex(
-      (n) =>
-        n.zoneId === notification.zoneId &&
-        n.suggestion && notification.suggestion && n.suggestion === notification.suggestion &&
-        (n.actionState === 'activated' || n.actionState === 'in_progress')
-    );
-
-    if (existingInProgressIndex !== -1) {
-      const updatedNotifications = [...prev];
-      updatedNotifications[existingInProgressIndex] = {
-        ...updatedNotifications[existingInProgressIndex],
-        actionState: 'in_progress',
-        message: `In progress: ${notification.message}`,
-        timestamp: new Date(),
-      };
-      return updatedNotifications;
-    }
-
-    // Logic 2b: Vô hiệu hóa các 'pending' cũ hơn cùng loại
-    const newNotification: Notification = {
-      ...notification,
-      id: uuidv4(),
-      timestamp: new Date(),
-      actionState: notification.suggestion ? 'pending' : 'dismissed',
-    };
-
-    const updatedPrev = prev.map(n => {
-      if (
-        n.zoneId === newNotification.zoneId &&
-        n.suggestion && newNotification.suggestion && n.suggestion === newNotification.suggestion &&
-        n.actionState === 'pending'
-      ) {
-        return { ...n, actionState: 'dismissed' };
-      }
-      return n;
+      // Thêm thông báo mới vào đầu
+      return [newNotification, ...updatedPrev.slice(0, 49)];
     });
-
-    // Thêm thông báo mới vào đầu
-    return [newNotification, ...updatedPrev.slice(0, 49)];
-  });
   };
 
   const handleNotificationAction = async (notificationId: string, action: 'yes' | 'no') => {
@@ -244,6 +244,8 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
           throw new Error("User not authenticated");
         }
         const token = await auth.currentUser.getIdToken(true); // true để ép làm mới token nếu cần
+
+        console.log('token in notification:', token);
 
         const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
         if (!apiBaseUrl) {

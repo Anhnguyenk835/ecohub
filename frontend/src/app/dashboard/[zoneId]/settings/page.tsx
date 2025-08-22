@@ -21,7 +21,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { toast } from "sonner" 
+import { toast } from "sonner"
+import NotificationPreferences from "@/components/layout/NotificationPreferences" 
 
 interface ThresholdSetting {
   enabled: boolean
@@ -76,7 +77,7 @@ export default function ZoneSettingsPage() {
     if (!zoneId || authLoading || !user) {
         if (authLoading) return;
         if (!user) {
-            toast.error("Bạn cần đăng nhập để xem trang này.");
+            toast("Bạn cần đăng nhập để xem trang này.", { type: "error" });
             setIsLoading(false);
         }
         return;
@@ -114,7 +115,7 @@ export default function ZoneSettingsPage() {
         
       } catch (error: any) {
         console.error("Lỗi khi fetch dữ liệu:", error)
-        toast.error(error.message || "Không thể tải dữ liệu cài đặt.")
+        toast(error.message || "Không thể tải dữ liệu cài đặt.", { type: "error" })
       } finally {
         setIsLoading(false)
       }
@@ -166,13 +167,13 @@ export default function ZoneSettingsPage() {
         
         const updatedZone = await response.json();
 
-        toast.success("Update successfully");
+        toast("Update successfully", { type: "success" });
         setIsDirty(false);
         setZoneData(updatedZone);
         setOriginalZoneData(JSON.parse(JSON.stringify(updatedZone)));
 
       } catch (error: any) {
-        toast.error(error.message || "Can't update");
+        toast(error.message || "Can't update", { type: "error" });
       }
   }
 
@@ -188,11 +189,11 @@ export default function ZoneSettingsPage() {
 
       if (response.status !== 204) throw new Error("Lỗi khi xóa khu vực.");
     
-      toast.success("Đã xóa khu vực thành công!");
+      toast("Đã xóa khu vực thành công!", { type: "success" });
       setIsDeleteModalOpen(false)
       window.location.href = '/dashboard'; 
     } catch (error: any) {
-      toast.error(error.message || "Không thể xóa khu vực.");
+      toast(error.message || "Không thể xóa khu vực.", { type: "error" });
     }
   }
 
@@ -205,7 +206,7 @@ export default function ZoneSettingsPage() {
   }
 
   return (
-    <div className="space-y--2 p-4 md:p-6">
+    <div className="space-y-6 p-4 md:p-6 overflow-y-auto h-full">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Setting</h1>
@@ -292,9 +293,10 @@ export default function ZoneSettingsPage() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="sensors">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="sensors">Cảm biến ({sensors.length})</TabsTrigger>
                 <TabsTrigger value="actuators">Cơ cấu chấp hành ({actuators.length})</TabsTrigger>
+                <TabsTrigger value="notifications">Thông báo</TabsTrigger>
               </TabsList>
               <TabsContent value="sensors" className="mt-4 space-y-2">
                  {sensors.map(sensor => (
@@ -317,6 +319,9 @@ export default function ZoneSettingsPage() {
                         <Button variant="ghost" size="sm">Chỉnh sửa</Button>
                     </div>
                  ))}
+              </TabsContent>
+              <TabsContent value="notifications" className="mt-4">
+                <NotificationPreferences />
               </TabsContent>
             </Tabs>
           </CardContent>
