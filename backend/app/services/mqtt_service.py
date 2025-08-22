@@ -26,17 +26,6 @@ sensor_service = SensorService()
 zone_service = ZoneService()
 action_log_service = ActionLogService()
 
-def get_event_loop_status():
-    """Get the current event loop status for debugging."""
-    try:
-        loop = asyncio.get_event_loop()
-        return {
-            "running": loop.is_running(),
-            "closed": loop.is_closed(),
-            "loop_id": id(loop)
-        }
-    except Exception as e:
-        return {"error": str(e)}
 
 async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) -> str:
     overall_status = "Good" 
@@ -139,6 +128,15 @@ async def evaluate_thresholds(zone_id: str, readings: dict, thresholds: dict) ->
     most_critical_issue = issue_status[0]
     overall_status = most_critical_issue["status"]
     suggestion = most_critical_issue["suggestion"]
+
+    for issue in issue_status:
+        publish_notification(
+            zone_id, 
+            issue["status"], 
+            issue["message"], 
+            issue["suggestion"],
+            issue["suggestion_text"] # Truyền tham số mới
+        )
 
     # Note: Email sending is now handled directly in process_sensor_data
     # when zone status is updated, not through publish_notification
