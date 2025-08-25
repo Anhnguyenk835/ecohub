@@ -21,26 +21,27 @@ interface MetricCardProps {
 function MetricCard({ title, value, unit, description, icon, variant = "default", badge, onClick, clickable }: MetricCardProps) {
   return (
     <Card 
-      className={`relative ${variant === "success" ? "bg-green-600 text-white" : "bg-white"} h-full ${clickable ? "cursor-pointer hover:shadow-lg transition-shadow" : ""}`}
+      className={`relative ${variant === "success" ? "bg-green-600 text-white" : "bg-white"} h-full ${clickable ? "cursor-pointer hover:shadow-lg hover:bg-green-50 transition-all duration-200" : ""} overflow-hidden`}
       onClick={clickable ? onClick : undefined}
     >
-      <CardContent className="px-6 h-full flex flex-col justify-between">
-        <div className="flex items-start justify-between mb-1">
-          <div className={`p-1 rounded`}>{icon}</div>
-          <ExternalLink className={`h-3 w-3 ${variant === "success" ? "text-white" : "text-gray-400"}`} />
+      <CardContent className="px-4 h-full flex flex-col justify-between min-h-0">
+        <div className="flex items-start justify-between mb-2 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className={`p-0.5 rounded`}>{icon}</div>
+            <h3 className={`text-sm font-medium ${variant === "success" ? "text-white" : "text-gray-600"} line-clamp-1`}>
+              {title}
+            </h3>
+          </div>
+          <ExternalLink className={`h-2.5 w-2.5 ${variant === "success" ? "text-white" : "text-gray-400"}`} />
         </div>
 
-        <div className="flex-1 flex flex-col justify-center">
-          <h3 className={`text-md font-medium mb-1 ${variant === "success" ? "text-white" : "text-gray-600"}`}>
-            {title}
-          </h3>
-
+        <div className="flex-1 flex flex-col justify-center min-h-0">
           <div className="flex items-baseline gap-1 mb-3">
-            <span className={`text-lg font-bold ${variant === "success" ? "text-white" : "text-gray-900"}`}>
+            <span className={`text-base font-bold ${variant === "success" ? "text-white" : "text-gray-900"}`}>
               {value}
             </span>
             {unit && (
-              <span className={`text-sm ${variant === "success" ? "text-white" : "text-gray-600"}`}>{unit}</span>
+              <span className={`text-xs ${variant === "success" ? "text-white" : "text-gray-600"}`}>{unit}</span>
             )}
             {badge && (
               <span className="ml-1 px-1 py-0.5 bg-white text-green-600 text-xs font-medium rounded">{badge}</span>
@@ -48,7 +49,7 @@ function MetricCard({ title, value, unit, description, icon, variant = "default"
           </div>
 
           <p
-            className={`text-xs leading-tight ${variant === "success" ? "text-green-100" : "text-gray-500"} line-clamp-2`}
+            className={`text-xs leading-tight ${variant === "success" ? "text-green-100" : "text-gray-500"} line-clamp-2 flex-1`}
           >
             {description}
           </p>
@@ -115,7 +116,7 @@ export default function MetricsGrid({
       title: "Health",
       value: overallStatus ?? "—",
       description: "Overall field condition",
-      icon: <Leaf className="h-6 w-6" />,
+      icon: <Leaf className="h-5 w-5" />,
       variant: overallStatus ? (overallStatus.toLowerCase().includes("good") ? ("success" as const) : ("default" as const)) : ("default" as const),
       badge: overallStatus ? undefined : undefined,
       clickable: false, // Health metric is not clickable
@@ -125,7 +126,7 @@ export default function MetricsGrid({
       value: `${formatNumber(readings?.temperature, 1)}`,
       unit: "°C",
       description: "Maintain temperature consistent",
-      icon: <Thermometer className="h-6 w-6" />,
+      icon: <Thermometer className="h-5 w-5" />,
       clickable: true,
       metricType: "temperature",
       onClick: () => openChart("temperature", "Temperature", "°C"),
@@ -135,7 +136,7 @@ export default function MetricsGrid({
       value: `${formatNumber(readings?.airHumidity)}`,
       unit: "%",
       description: "Ensure ventilation is sufficient to prevent mold growth",
-      icon: <Droplets className="h-6 w-6" />,
+      icon: <Droplets className="h-5 w-5" />,
       clickable: true,
       metricType: "airHumidity", 
       onClick: () => openChart("airHumidity", "Air Humidity", "%"),
@@ -145,7 +146,7 @@ export default function MetricsGrid({
       value: `${formatNumber(readings?.soilMoisture)}`,
       unit: "%",
       description: "Keep monitoring to ensure it remains consistent",
-      icon: <Waves className="h-6 w-6" />,
+      icon: <Waves className="h-5 w-5" />,
       clickable: true,
       metricType: "soilMoisture",
       onClick: () => openChart("soilMoisture", "Soil Moisture", "%"),
@@ -154,7 +155,7 @@ export default function MetricsGrid({
       title: "pH Level",
       value: `${formatNumber(readings?.pH, 1)}`,
       description: "Add acid compost to balance the pH",
-      icon: <TestTube className="h-6 w-6" />,
+      icon: <TestTube className="h-5 w-5" />,
       clickable: true,
       metricType: "ph",
       onClick: () => openChart("ph", "ph Level"),
@@ -163,7 +164,7 @@ export default function MetricsGrid({
       title: "Light",
       value: `${formatNumber(readings?.lightIntensity)}`,
       description: "Lighting level",
-      icon: <Wind className="h-6 w-6" />,
+      icon: <Wind className="h-5 w-5" />,
       clickable: true,
       metricType: "lightIntensity",
       onClick: () => openChart("lightIntensity", "Light Intensity"),
@@ -172,7 +173,7 @@ export default function MetricsGrid({
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-2 h-full">
+      <div className="grid grid-cols-3 gap-2 h-full overflow-hidden">
         {metrics.map((metric, index) => (
           <MetricCard
             key={index}

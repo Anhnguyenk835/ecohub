@@ -226,15 +226,15 @@ export default function ZoneSettingsPage() {
         <div>
           <h1 className="text-2xl font-bold">Setting</h1>
           <p className="text-muted-foreground">{zoneData.name}</p>
-          <code className="text-xs text-muted-foreground mt-1 block">{zoneData.id}</code>
+          <code className="text-sm text-muted-foreground mt-1 block">{zoneData.location}</code>
         </div>
         {/* ========================== BẮT ĐẦU VÙNG SỬA ĐỔI ========================== */}
         <Button 
           onClick={handleSaveChanges} 
           disabled={!isDirty}
           className={cn(
-            "transition-colors", // Thêm hiệu ứng chuyển màu mượt mà
-            isDirty && "bg-destructive hover:bg-destructive/90" // Nếu có thay đổi, áp dụng class màu đỏ
+            "transition-colors cursor-pointer", // Thêm hiệu ứng chuyển màu mượt mà
+            isDirty && "bg-black hover:bg-green-700" // Nếu có thay đổi, áp dụng class màu đỏ
           )}
         >
           Update
@@ -308,12 +308,12 @@ export default function ZoneSettingsPage() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="sensors">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-3 cursor-pointer">
                 <TabsTrigger value="sensors">Sensors ({sensors.length})</TabsTrigger>
                 <TabsTrigger value="actuators">Actuators ({actuators.length})</TabsTrigger>
                 <TabsTrigger value="notifications">Notification</TabsTrigger>
               </TabsList>
-              <TabsContent value="sensors" className="mt-4 space-y-2">
+              <TabsContent value="sensors" className="mt-4 space-y-2 cursor-pointer">
                  {sensors.map(sensor => (
                     <div key={sensor.id} className="flex items-center justify-between p-2 border rounded-md">
                         <div>
@@ -325,9 +325,9 @@ export default function ZoneSettingsPage() {
                     </div>
                  ))}
               </TabsContent>
-              <TabsContent value="actuators" className="mt-4 space-y-2">
+              <TabsContent value="actuators" className="mt-4 space-y-2 cursor-pointer">
                  {actuators.map(actuator => (
-                    <div key={actuator.id} className="flex items-center justify-between p-2 border rounded-md">
+                    <div key={actuator.id} className="flex items-center justify-between p-2 border rounded-md cursor-pointer">
                         <div>
                             <p className="font-medium">
                               {ACTUATOR_DISPLAY_NAMES[actuator.type] || actuator.name}
@@ -356,7 +356,7 @@ export default function ZoneSettingsPage() {
             </div>
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
                 <DialogTrigger asChild>
-                    <Button variant="destructive">Delete</Button>
+                    <Button className="cursor-pointer" variant="destructive">Delete</Button>
                 </DialogTrigger>
                 <DialogContent>
                     <DialogHeader>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { X, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
 import {
   Chart as ChartJS,
@@ -65,6 +65,28 @@ export default function ChartPopup({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [chartRef, setChartRef] = useState<any>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+
+  // Handle click outside to close popup
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isOpen &&
+        popupRef.current &&
+        !popupRef.current.contains(event.target as Node)
+      ) {
+        onClose()
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('mousedown', handleClickOutside);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!isOpen || !zoneId || !metricType) {
@@ -193,6 +215,8 @@ export default function ChartPopup({
     }
   }
 
+  // Chart.js
+
   // Chart.js options with zoom functionality
   const chartOptions = {
     responsive: true,
@@ -263,8 +287,8 @@ export default function ChartPopup({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <Card className="w-full max-w-4xl max-h-[90vh] bg-white relative">
+    <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-1001 p-4">
+        <Card ref={popupRef} className="w-full max-w-4xl max-h-[90vh] bg-white relative">
           {/* Close button - Top right corner */}
           <button
             onClick={onClose}

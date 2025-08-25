@@ -3,13 +3,14 @@
 import { useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, Leaf } from "lucide-react"
+import { Eye, EyeOff, Leaf, Loader2 } from "lucide-react"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
   const { signIn } = useAuth()
   const router = useRouter()
 
@@ -26,7 +27,7 @@ export default function LoginPage() {
               </div>
               <h1 className="text-4xl font-medium text-[#357133]">EcoHub</h1>
             </div>
-            <p className="text-sm text-[#2E7D32] leading-relaxed max-w-sm mx-auto">
+            <p className="text-sm text-[#357133] leading-relaxed max-w-sm mx-auto">
               Sign in to stay updated on field insights and manage resources with ease
             </p>
           </div>
@@ -37,6 +38,7 @@ export default function LoginPage() {
             onSubmit={async (e) => {
               e.preventDefault()
               setError(null)
+              setIsLoading(true)
               try {
                 await signIn(email, password)
                 // Log user id and token for debugging as requested
@@ -50,6 +52,8 @@ export default function LoginPage() {
                 router.push('/home')
               } catch (err: any) {
                 setError(err?.message || "Failed to sign in")
+              } finally {
+                setIsLoading(false)
               }
             }}
           >
@@ -64,7 +68,8 @@ export default function LoginPage() {
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all duration-200 text-gray-900 placeholder-gray-500"
+                  disabled={isLoading}
+                  className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all duration-200 text-gray-900 placeholder-gray-500 disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-70"
                 />
               </div>
 
@@ -78,12 +83,14 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all duration-200 text-gray-900 placeholder-gray-500 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
+                  disabled={isLoading}
+                  className="w-full h-12 px-4 border border-gray-300 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200 focus:outline-none transition-all duration-200 text-gray-900 placeholder-gray-500 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden disabled:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-70"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 transform translate-y-1 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                  disabled={isLoading}
+                  className="absolute right-4 top-1/2 transform translate-y-1 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -102,9 +109,17 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              className="w-full h-12 bg-[#648E7F] hover:bg-[#5A7F71] active:bg-[#507063] text-white font-semibold rounded-lg transition-all duration-200 cursor-pointer"
+              disabled={isLoading}
+              className="w-full h-12 bg-[#648E7F] hover:bg-[#5A7F71] active:bg-[#507063] text-white font-semibold rounded-lg transition-all duration-200 cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400 flex items-center justify-center space-x-2"
             >
-              SIGN IN
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>SIGNING IN...</span>
+                </>
+              ) : (
+                "SIGN IN"
+              )}
             </button>
           </form>
 

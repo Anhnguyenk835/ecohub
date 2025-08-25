@@ -5,6 +5,7 @@ import { Star, ArrowRight, ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { Navbar } from "../layout/nav-bar"
 import { FieldCard, type FieldData } from "../layout/field-card"
 import { AddFieldModal } from "../layout/AddFieldModal"
+import { LoadingOverlay } from "../ui/loading-overlay"
 import { get, post, del } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"  
 import { useRouter } from "next/navigation"
@@ -16,6 +17,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [navigatingToZone, setNavigatingToZone] = useState<string | null>(null)
   const { user } = useAuth()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [hasOverflow, setHasOverflow] = useState(false)
@@ -199,10 +202,26 @@ export default function HomePage() {
     }
   };
 
+  const handleFieldClick = (zoneId: string, zoneName: string) => {
+    setIsNavigating(true);
+    setNavigatingToZone(zoneName);
+    
+    // Add a small delay to show the loading state
+    setTimeout(() => {
+      router.push(`/dashboard/${zoneId}`);
+    }, 100);
+  };
+
   // Phần JSX để render giao diện
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        isVisible={isNavigating} 
+        message={navigatingToZone ? `Loading ${navigatingToZone} dashboard...` : "Loading dashboard..."}
+      />
 
       {/* Hero Section */}
       <div className="relative h-64 bg-gradient-to-r from-green-600 to-green-800">
@@ -264,7 +283,7 @@ export default function HomePage() {
               <FieldCard
                 key={field.id}
                 field={field}
-                onClick={() => router.push(`/dashboard/${field.id}`)}
+                onClick={() => handleFieldClick(field.id, field.name)}
                 onDelete={handleDeleteField}
               />
             ))}

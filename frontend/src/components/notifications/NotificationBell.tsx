@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -26,6 +26,9 @@ export default function NotificationBell() {
   const router = useRouter();
   const unreadCount = notifications.filter(n => n.actionState === 'pending').length; // Chỉ đếm thông báo chờ xử lý
   const pathname = usePathname();
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
   const handleToggle = () => setIsOpen((prev) => !prev);
 
   const pathParts = pathname.match(/^\/dashboard\/(.+)/);
@@ -38,13 +41,37 @@ export default function NotificationBell() {
     router.push(`/dashboard/${zoneId}`);
   };
 
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isOpen &&
+        dropdownRef.current &&
+        buttonRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('mousedown', handleClickOutside);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
   return (
     <div className="relative">
       {/* Nút chuông không thay đổi nhiều */}
       <button
+        ref={buttonRef}
         onClick={handleToggle}
-        className={`relative p-2 rounded-full focus:outline-none transition-colors
-                    ${isOpen ? 'bg-gray-700 text-yellow-400' : 'text-gray-300 hover:text-white hover:bg-gray-700'}`}
+        className={`relative p-2 rounded-full focus:outline-none transition-colors cursor-pointer text-white
+                    ${isOpen ? 'bg-green-700 text-yellow-400' : 'text-gray-300 hover:text-white hover:bg-green-700'}`}
       >
         {isOpen ? (
           <Bell className="h-6 w-6 fill-yellow-400 text-yellow-400" />
@@ -61,10 +88,11 @@ export default function NotificationBell() {
       {/* Dropdown thông báo - Đây là phần chúng ta sẽ làm lại */}
       {isOpen && (
         <div 
+          ref={dropdownRef}
           className="origin-top-right absolute right-0 mt-4 w-80 sm:w-96 
                      bg-gray-50 dark:bg-gray-900 rounded-2xl shadow-lg 
                      ring-1 ring-black ring-opacity-5 focus:outline-none
-                     flex flex-col z-50"
+                     flex flex-col z-1000"
         >
           {/* Header */}
           <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">

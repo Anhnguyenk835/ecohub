@@ -6,6 +6,43 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Leaflet Map Styles */
+.leaflet-container {
+  font-family: inherit;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.leaflet-popup-content {
+  margin: 8px 12px;
+  line-height: 1.4;
+}
+
+.leaflet-tooltip {
+  background: rgba(16, 185, 129, 0.9);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: 500;
+  font-size: 12px;
+  padding: 4px 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.leaflet-tooltip::before {
+  border-top-color: rgba(16, 185, 129, 0.9);
+}
+
+.zone-area-label {
+  background: rgba(16, 185, 129, 0.9) !important;
+  color: white !important;
+  border: none !important;
+  font-weight: 600 !important;
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);

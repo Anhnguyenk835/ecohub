@@ -227,7 +227,7 @@ export default function NotificationPreferences() {
         <div className="space-y-2">
           <Label htmlFor="minimum-severity">Minimum Alert Severity</Label>
           <Select value={preferences.severity.minimum} onValueChange={handleSeverityChange}>
-            <SelectTrigger>
+            <SelectTrigger className="cursor-pointer">
               <SelectValue placeholder="Select minimum severity" />
             </SelectTrigger>
             <SelectContent>
@@ -271,7 +271,7 @@ export default function NotificationPreferences() {
 
         {/* Save Button */}
         <div className="flex justify-end space-x-2">
-          <Button 
+          {/* <Button 
             variant="outline" 
             onClick={testEmail} 
             disabled={testing}
@@ -285,8 +285,8 @@ export default function NotificationPreferences() {
             className="bg-yellow-50 hover:bg-yellow-100"
           >
             {simpleTesting ? 'Testing...' : 'Simple Test Email'}
-          </Button>
-          <Button onClick={savePreferences} disabled={saving}>
+          </Button> */}
+          <Button className="cursor-pointer" onClick={savePreferences} disabled={saving}>
             {saving ? 'Saving...' : 'Save Preferences'}
           </Button>
         </div>

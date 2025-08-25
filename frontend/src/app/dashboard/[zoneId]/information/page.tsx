@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState, useRef } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import MetricsGrid, { type ZoneStatusReadings } from "@/components/layout/metrics-grid"
+import ZoneMap from "@/components/ui/zone-map"
 import { get } from "@/lib/api"
 import mqtt from "mqtt"
+import { Leaf, MapPin, Clock, Activity, CheckCircle, AlertTriangle, XCircle } from "lucide-react"
 
 type ZoneStatusResponse = {
   status?: string
@@ -20,6 +23,13 @@ type ZoneStatusResponse = {
   }
 }
 
+type ZoneInfo = {
+  id: string
+  name: string
+  location?: string
+  createdAt?: string
+}
+
 export default function ZoneInformationPage() {
   const params = useParams<{ zoneId: string }>()
   const zoneId = params?.zoneId
@@ -27,7 +37,26 @@ export default function ZoneInformationPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [zoneStatus, setZoneStatus] = useState<ZoneStatusResponse | null>(null)
+  const [zoneInfo, setZoneInfo] = useState<ZoneInfo | null>(null)
   const clientRef = useRef<any>(null)
+
+  // Fetch zone information
+  useEffect(() => {
+    let cancelled = false
+    async function fetchZoneInfo() {
+      if (!zoneId) return
+      try {
+        const data = await get<ZoneInfo>(`/zones/${encodeURIComponent(zoneId)}`)
+        if (!cancelled) setZoneInfo(data)
+      } catch (e) {
+        console.error("Failed to load zone info:", e)
+        // Set default zone info if API fails
+        if (!cancelled) setZoneInfo({ id: zoneId, name: `Zone ${zoneId}` })
+      }
+    }
+    fetchZoneInfo()
+    return () => { cancelled = true }
+  }, [zoneId])
 
   // Initial data fetch
   useEffect(() => {
@@ -132,40 +161,141 @@ export default function ZoneInformationPage() {
     }
   }, [zoneStatus?.lastUpdated])
 
+  const getStatusIcon = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'good':
+      case 'healthy':
+      case 'normal':
+        return <CheckCircle className="w-5 h-5 text-green-500" />
+      case 'warning':
+      case 'caution':
+        return <AlertTriangle className="w-5 h-5 text-yellow-500" />
+      case 'danger':
+      case 'critical':
+      case 'error':
+        return <XCircle className="w-5 h-5 text-red-500" />
+      default:
+        return <Activity className="w-5 h-5 text-gray-500" />
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'good':
+      case 'healthy':
+      case 'normal':
+        return 'bg-green-100 text-green-800 border-green-200'
+      case 'warning':
+      case 'caution':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'danger':
+      case 'critical':
+      case 'error':
+        return 'bg-red-100 text-red-800 border-red-200'
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+  }
+
   return (
-    <div className="flex gap-4 h-[95%]">
+    <div className="flex gap-4 h-[100%]">
       <div className="flex-1 flex flex-col">
-        <Card className="mb-4 flex-[3] min-h-0">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xl font-semibold text-gray-900">Zone {zoneId}</div>
-                {overallStatus && (
-                  <div className="text-sm text-gray-600">Status: {overallStatus}</div>
-                )}
-                {formattedUpdated && (
-                  <div className="text-xs text-gray-500">
-                    Last updated: {formattedUpdated}
-                    {liveTimestamp && liveTimestamp !== formattedUpdated && (
-                      <span className="ml-2 text-green-600">• Live: {liveTimestamp}</span>
-                    )}
+        <Card className="mb-4 h-[50%] border-0 shadow-lg bg-gradient-to-br from-white to-gray-50">
+          <CardContent className="px-6 py-3 flex flex-col h-full">
+            {loading ? (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <Skeleton className="w-8 h-8 rounded-full" />
+                  <Skeleton className="h-8 w-48" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-40" />
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Skeleton className="w-4 h-4" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                  <Skeleton className="flex-1 min-h-0 rounded-lg" />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col h-full space-y-2">
+                {/* Header Section */}
+                <div className="flex items-start justify-between flex-shrink-0">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+                      <Leaf className="w-7 h-7 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold text-gray-900">
+                        {zoneInfo?.name || `Zone ${zoneId}`}
+                      </h1>
+                      {zoneInfo?.location && (
+                        <div className="flex items-center space-x-2 text-gray-600 mt-1">
+                          <MapPin className="w-4 h-4" />
+                          <span className="text-sm">{zoneInfo.location}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Status Badge */}
+                  {overallStatus && (
+                    <div className={`flex items-center space-x-2 px-4 py-2 rounded-full border ${getStatusColor(overallStatus)}`}>
+                      {getStatusIcon(overallStatus)}
+                      <span className="font-medium text-sm capitalize">{overallStatus}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Zone Map */}
+                <div className="flex-1 min-h-0 flex flex-col">
+                  <ZoneMap 
+                    zoneName={zoneInfo?.name || `Zone ${zoneId}`}
+                    location={zoneInfo?.location}
+                  />
+                </div>
+
+                {/* Error Display */}
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex-shrink-0">
+                    <div className="flex items-center space-x-2 text-red-800">
+                      <XCircle className="w-5 h-5" />
+                      <span className="font-medium">Error: {error}</span>
+                    </div>
                   </div>
                 )}
               </div>
-              {loading && <div className="text-sm text-gray-500">Loading…</div>}
-              {error && <div className="text-sm text-red-600">{error}</div>}
-            </div>
+            )}
           </CardContent>
         </Card>
 
-        <div className="h-[360px] min-h-0">
+        <div className="h-[50%] min-h-0 overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               <span className="text-xs text-gray-500">Live updates</span>
             </div>
           </div>
-          <MetricsGrid readings={readings} overallStatus={overallStatus} zoneId={zoneId} />
+          <div className="h-[calc(100%-2rem)]">
+            {loading ? (
+              <div className="grid grid-cols-3 gap-2 h-full">
+                {[...Array(6)].map((_, i) => (
+                  <Card key={i} className="p-4">
+                    <CardContent className="p-0 space-y-3">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-8 w-16" />
+                      <Skeleton className="h-3 w-24" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <MetricsGrid readings={readings} overallStatus={overallStatus} zoneId={zoneId} />
+            )}
+          </div>
         </div>
       </div>
 

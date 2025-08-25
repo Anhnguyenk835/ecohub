@@ -87,7 +87,7 @@ function CircleButton({
       aria-pressed={active}
       className={[
         "relative select-none w-40 h-40 rounded-full grid place-items-center",
-        "shadow-lg ring-2 transition-all duration-200 ease-out",
+        "shadow-lg ring-2 transition-all duration-200 ease-out cursor-pointer",
         active
           ? "bg-green-400 text-white ring-green-400 hover:scale-105"
           : "bg-red-400 text-white ring-red-400 hover:scale-105",

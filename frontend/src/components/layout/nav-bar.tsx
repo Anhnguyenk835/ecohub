@@ -62,7 +62,7 @@ export function Navbar() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setOpen((v) => !v)}
-              className="p-2 text-white hover:text-green-700 transition-colors cursor-pointer focus:outline-none focus:ring-0"
+              className="p-2 text-white hover:text-white hover:bg-green-700 rounded-full transition-all duration-200 cursor-pointer focus:outline-none focus:ring-0"
               aria-haspopup="menu"
               aria-expanded={open}
             >
