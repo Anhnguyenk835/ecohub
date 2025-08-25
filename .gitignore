@@ -145,6 +145,8 @@ Thumbs.db
 
 # Firebase
 !package*.json
+ecohub-9087f-firebase-adminsdk-fbsvc-465c7d81ca.json
+
 
 # Poetry
 poetry.lock
