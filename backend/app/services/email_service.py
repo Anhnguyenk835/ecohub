@@ -20,10 +20,10 @@ class EmailService:
         """Initialize the email service with configuration."""
         try:
             # Get email configuration from environment variables
-            mail_username = os.getenv("MAIL_USERNAME", "")
-            mail_password = os.getenv("MAIL_PASSWORD", "")
-            mail_from = os.getenv("MAIL_FROM", "noreply@ecohub.com")
-            mail_port = int(os.getenv("MAIL_PORT", "587"))
+            mail_username = os.getenv("MAIL_USERNAME", "") # tuananh835.nta@gmail.com -> DNS -> noreply@ecohub.com
+            mail_password = os.getenv("MAIL_PASSWORD", "") 
+            mail_from = os.getenv("MAIL_FROM", "noreply@ecohub.com") 
+            mail_port = int(os.getenv("MAIL_PORT", "587"))  # SMTP 
             mail_server = os.getenv("MAIL_SERVER", "smtp.gmail.com")
             
             logger.info(f"📧 EMAIL CONFIG - Server: {mail_server}:{mail_port}, From: {mail_from}, Username: {mail_username}")
@@ -58,7 +58,7 @@ class EmailService:
             templates_dir = current_dir / "templates"
             
             if templates_dir.exists():
-                self.template_env = Environment(loader=FileSystemLoader(str(templates_dir)))
+                self.template_env = Environment(loader=FileSystemLoader(str(templates_dir))) # custom html
             else:
                 # Create templates directory if it doesn't exist
                 templates_dir.mkdir(exist_ok=True)

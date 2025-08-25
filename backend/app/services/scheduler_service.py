@@ -180,8 +180,8 @@ class APSchedulerService:
                 
                 # Schedule the job
                 job = self.scheduler.add_job(
-                    func=job_func,
-                    trigger=DateTrigger(run_date=run_time),
+                    func=job_func, # cái mình cần thực hiện
+                    trigger=DateTrigger(run_date=run_time), # thời gian mình thực hiện (1 ngày cụ thể giờ phút)
                     id=schedule_id,
                     name=f"Once schedule: {schedule_data.get('name', 'Unknown')}",
                     replace_existing=True
